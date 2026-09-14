@@ -54,6 +54,10 @@ export async function GET() {
         color: m.color,
         active: m.active,
       })),
+      // Lets the browser decide what to *offer* — the Analytics link. It
+      // decides nothing about access: the analytics route checks again on
+      // the server, and a developer's items were already filtered above.
+      viewer: { id: member.id, role: member.role },
     });
   } catch (e) {
     return fail(e);

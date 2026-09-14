@@ -56,6 +56,9 @@
   --color-brand-deep: var(--brand-deep);
   --color-brand-tint: var(--brand-tint);
   --color-ice: var(--ice);
+  --color-viz-on-time: var(--viz-on-time);
+  --color-viz-late: var(--viz-late);
+  --color-viz-overdue: var(--viz-overdue);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -99,6 +102,15 @@
   --brand-tint: #e4ebf9;
   --ice: #85a9dd;
 
+  /* Delivery outcomes on the analytics page. On time recedes in blue so the
+     two lateness colours carry the story; red and green were rejected as a
+     pair because they collapse together under deuteranopia. Validated as a
+     set, all pairs, against the card surface in each mode — see the
+     palette note in components/analytics/analytics-dashboard.tsx. */
+  --viz-on-time: #2a78d6;
+  --viz-late: #ec835a;
+  --viz-overdue: #b3261e;
+
   --sidebar: #ffffff;
   --sidebar-foreground: #0a1020;
   --sidebar-primary: #204494;
@@ -141,6 +153,10 @@
   --brand-deep: #b9cdec;
   --brand-tint: #142138;
   --ice: #85a9dd;
+
+  --viz-on-time: #3987e5;
+  --viz-late: #cf7a2e;
+  --viz-overdue: #b02a2a;
 
   --sidebar: #0b0f19;
   --sidebar-foreground: #e6ebf5;

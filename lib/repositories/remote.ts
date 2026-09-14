@@ -56,6 +56,7 @@ export const remoteRepository: TrackerRepository = {
       items: data?.items ?? [],
       warnings: data?.warnings ?? [],
       members: data?.members,
+      viewer: data?.viewer,
     };
   },
 

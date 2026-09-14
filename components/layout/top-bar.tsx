@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
+import Link from "next/link";
 import {
+  ChartColumn,
   Moon,
   Plus,
   RefreshCw,
@@ -25,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/dates";
 import { repository } from "@/lib/repositories";
+import { useTracker } from "@/lib/store";
 import type { SyncState } from "@/lib/types";
 import { Mark } from "@/components/shared/mark";
 import { UserMenu } from "@/components/layout/user-menu";
@@ -119,7 +122,7 @@ function SyncPill({
   );
 }
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
 
   return (
@@ -157,6 +160,9 @@ export function TopBar({
   onClear: () => void;
   onNew: () => void;
 }) {
+  // Offered, not permitted: /analytics checks the role again on the server.
+  const isAdmin = useTracker((s) => s.viewer?.role === "admin");
+
   // "/" focuses search, the way every tool this team already uses behaves.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -223,6 +229,19 @@ export function TopBar({
             onClear={onClear}
           />
         </div>
+        {isAdmin && (
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 px-2.5 text-[12px] text-muted-foreground hover:text-foreground"
+          >
+            <Link href="/analytics">
+              <ChartColumn className="size-3.5" />
+              <span className="hidden sm:inline">Analytics</span>
+            </Link>
+          </Button>
+        )}
         <ThemeToggle />
         <Button size="sm" className="h-8 gap-1.5 pr-3 pl-2.5" onClick={onNew}>
           <Plus className="size-3.5" />

@@ -1,4 +1,4 @@
-import type { Member, WorkItem } from "./types";
+import type { Member, Role, WorkItem } from "./types";
 
 export interface LoadResult {
   items: WorkItem[];
@@ -11,6 +11,8 @@ export interface LoadResult {
    * a team, and the seed list in constants.ts stands in.
    */
   members?: Member[];
+  /** Who is signed in. Absent from a backend with no sign-in. */
+  viewer?: { id: string; role: Role };
 }
 
 /** Thrown by adapters so the store can tell a conflict from a real failure. */
