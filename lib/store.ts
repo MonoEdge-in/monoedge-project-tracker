@@ -11,6 +11,7 @@ import type {
   GroupBy,
   Member,
   NewWorkItem,
+  Role,
   Status,
   SyncState,
   WorkItem,
@@ -71,6 +72,9 @@ interface TrackerState {
    * how someone who signed in this morning becomes assignable this morning.
    */
   members: Member[];
+  /** Who is signed in, once the first load says. Drives what the UI offers,
+   *  never what it permits — the server decides that. */
+  viewer: { id: string; role: Role } | null;
   loading: boolean;
   sync: SyncState;
   lastSyncedAt: string | null;
@@ -108,6 +112,7 @@ interface TrackerState {
 export const useTracker = create<TrackerState>((set, get) => ({
   items: [],
   members: TEAM,
+  viewer: null,
   loading: true,
   sync: "idle",
   lastSyncedAt: null,
@@ -122,10 +127,11 @@ export const useTracker = create<TrackerState>((set, get) => ({
   async load() {
     set({ loading: true, sync: "syncing" });
     try {
-      const { items, warnings, members } = await repository.list();
+      const { items, warnings, members, viewer } = await repository.list();
       set({
         items,
         ...(members?.length ? { members } : {}),
+        ...(viewer ? { viewer } : {}),
         warnings: warnings ?? [],
         loading: false,
         sync: "synced",

@@ -1,4 +1,6 @@
-import type { NextRequest } from "next/server";
+import { after, type NextRequest } from "next/server";
+import { entriesFor, type Actor } from "@/lib/audit";
+import { recordChanges } from "@/lib/server/log-store";
 import {
   createItem,
   loadItems,
@@ -6,12 +8,19 @@ import {
   SheetError,
 } from "@/lib/server/sheet-store";
 import { AuthError, isAdmin, requireMember, visibleTo } from "@/lib/server/session";
-import type { WorkItem } from "@/lib/types";
+import type { Member, WorkItem } from "@/lib/types";
 
 // Every request hits Google; nothing here is cacheable, and the Node runtime
 // is required because signing the service-account JWT needs node:crypto.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** Who the change log credits. The address disambiguates two people with
+ *  the same name, and survives a rename in the Team tab. */
+export const actorOf = (member: Member): Actor => ({
+  name: member.name,
+  email: member.email ?? "",
+});
 
 export function fail(e: unknown) {
   // Checked before SheetError so a refusal reads as a refusal rather than as
@@ -54,6 +63,10 @@ export async function GET() {
         color: m.color,
         active: m.active,
       })),
+      // Lets the browser decide what to *offer* — the Analytics link. It
+      // decides nothing about access: the analytics route checks again on
+      // the server, and a developer's items were already filtered above.
+      viewer: { id: member.id, role: member.role },
     });
   } catch (e) {
     return fail(e);
@@ -75,7 +88,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return Response.json(await createItem(item), { status: 201 });
+    const saved = await createItem(item);
+    after(() => recordChanges(entriesFor("created", actorOf(member), saved)));
+    return Response.json(saved, { status: 201 });
   } catch (e) {
     return fail(e);
   }

@@ -181,6 +181,19 @@ export async function createItem(item: WorkItem): Promise<WorkItem> {
   return { ...saved, sheetRow: row };
 }
 
+/** One item as the sheet has it now. */
+export async function getItem(id: string): Promise<WorkItem> {
+  const c = await ctx();
+  const rowNumber = await findRow(c, id);
+  const row =
+    (
+      await readRange(c.config, c.tab, `A${rowNumber}:${LAST_COL}${rowNumber}`)
+    )[0] ?? [];
+  const item = rowToItem(row, rowNumber, [], c.team);
+  if (!item) throw new SheetError(`${id} row is empty.`, 409);
+  return item;
+}
+
 export async function updateItem(
   id: string,
   patch: Partial<WorkItem>,

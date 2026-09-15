@@ -1,4 +1,5 @@
-import type { Member, WorkItem } from "./types";
+import type { LogEntry } from "./audit";
+import type { Member, Role, WorkItem } from "./types";
 
 export interface LoadResult {
   items: WorkItem[];
@@ -11,6 +12,8 @@ export interface LoadResult {
    * a team, and the seed list in constants.ts stands in.
    */
   members?: Member[];
+  /** Who is signed in. Absent from a backend with no sign-in. */
+  viewer?: { id: string; role: Role };
 }
 
 /** Thrown by adapters so the store can tell a conflict from a real failure. */
@@ -51,6 +54,11 @@ export interface TrackerRepository {
     expectedUpdatedAt?: string,
   ): Promise<WorkItem>;
   remove(id: string): Promise<void>;
+  /**
+   * One item's change log, newest first. Null when this backend keeps no
+   * log — the local draft has nobody signed in to credit a change to.
+   */
+  history(id: string): Promise<LogEntry[] | null>;
   /** Persist board order after a drag. */
   saveAll(items: WorkItem[]): Promise<void>;
   /**
