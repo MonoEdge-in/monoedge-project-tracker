@@ -243,6 +243,8 @@ async function call<T>(
   });
 
   if (!res.ok) {
+    // A failure may mean a tab was renamed or removed under a cached list.
+    tabCache = null;
     const body = await res.text();
     if (res.status === 403) {
       throw new SheetError(
@@ -277,18 +279,44 @@ interface SheetMeta {
   rowCount: number;
 }
 
-export async function getTab(config: SheetConfig): Promise<SheetMeta> {
-  const data = await call<{
-    sheets: {
-      properties: {
-        sheetId: number;
-        title: string;
-        gridProperties: { rowCount: number };
-      };
-    }[];
-  }>(config, "?fields=sheets.properties");
+type TabList = {
+  properties: {
+    sheetId: number;
+    title: string;
+    gridProperties: { rowCount: number };
+  };
+}[];
 
-  const tabs = data.sheets ?? [];
+/**
+ * The spreadsheet's tab list, per warm instance. Every request resolves at
+ * least one tab by name — tracker, Team, Log — and without this each lookup
+ * was its own round trip to Google, on every save, poll and page load.
+ *
+ * Tabs are renamed about never, so five minutes is safe; and any failed call
+ * to Google drops the cache (see `call`), so a renamed tab costs one failed
+ * request rather than five minutes of them.
+ */
+const TAB_TTL_MS = 5 * 60_000;
+let tabCache: { key: string; at: number; tabs: TabList } | null = null;
+
+export async function getTab(
+  config: SheetConfig,
+  /** Skip the cache — for diagnostics, and for checking a tab was created. */
+  { fresh = false }: { fresh?: boolean } = {},
+): Promise<SheetMeta> {
+  const key = config.spreadsheetId;
+  let tabs: TabList;
+  if (!fresh && tabCache?.key === key && Date.now() - tabCache.at < TAB_TTL_MS) {
+    tabs = tabCache.tabs;
+  } else {
+    const data = await call<{ sheets: TabList }>(
+      config,
+      "?fields=sheets.properties",
+    );
+    tabs = data.sheets ?? [];
+    tabCache = { key, at: Date.now(), tabs };
+  }
+
   if (!tabs.length) throw new SheetError("The spreadsheet has no tabs.", 500);
 
   const match = config.tabName
@@ -401,6 +429,7 @@ export async function addTab(config: SheetConfig, title: string): Promise<void> 
       requests: [{ addSheet: { properties: { title } } }],
     }),
   });
+  tabCache = null;
 }
 
 export async function deleteRow(

@@ -135,7 +135,7 @@ export async function GET() {
   // 2 — can we reach the spreadsheet at all
   let tab;
   try {
-    tab = await getTab(config);
+    tab = await getTab(config, { fresh: true });
     add({
       step: "Spreadsheet access",
       ok: true,

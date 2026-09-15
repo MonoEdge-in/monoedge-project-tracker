@@ -67,6 +67,9 @@ const pct = (rate: number | null) =>
 
 const days = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
 
+/** Board data younger than this is reused rather than reloaded. */
+const FRESH_MS = 30_000;
+
 export function AnalyticsDashboard() {
   const items = useTracker((s) => s.items);
   const loading = useTracker((s) => s.loading);
@@ -75,10 +78,16 @@ export function AnalyticsDashboard() {
   const load = useTracker((s) => s.load);
   const members = useMembers();
 
-  // Always re-read. Arriving from the board, the store already holds items
-  // and they render at once; this only makes sure a review is never run
-  // against a board someone left open since yesterday.
+  // Arriving from the board, the store already holds what the board loaded,
+  // and the board refreshes every 25 seconds while it is open. Reloading
+  // that on arrival cost a full round of Sheets requests for data seconds
+  // old. So: reuse it when fresh, reload when it is not — a board left open
+  // in a background tab stops refreshing, and a review must never run
+  // against yesterday's data.
   useEffect(() => {
+    const { items: held, lastSyncedAt } = useTracker.getState();
+    const age = lastSyncedAt ? Date.now() - Date.parse(lastSyncedAt) : Infinity;
+    if (held.length && age < FRESH_MS) return;
     void load();
   }, [load]);
 
@@ -109,31 +118,7 @@ export function AnalyticsDashboard() {
 
   return (
     <main className="flex h-full flex-col bg-background">
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-rule bg-card px-4 sm:px-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2.5">
-          <Mark />
-          <span className="display-mark text-[13px] leading-none">MonoEdge</span>
-        </Link>
-        <span aria-hidden className="h-5 w-px bg-rule" />
-        <span className="label-mono text-foreground">Analytics</span>
-
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <Button
-            asChild
-            variant="ghost"
-            size="sm"
-            className="h-8 gap-1.5 px-2.5 text-[12px] text-muted-foreground hover:text-foreground"
-          >
-            <Link href="/">
-              <ArrowLeft className="size-3.5" />
-              <span className="hidden sm:inline">Board</span>
-            </Link>
-          </Button>
-          <ThemeToggle />
-          <span aria-hidden className="h-5 w-px bg-rule" />
-          <UserMenu />
-        </div>
-      </header>
+      <AnalyticsHeader />
 
       <div className="board-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-6xl space-y-5 px-4 py-5 sm:px-6">
@@ -237,6 +222,38 @@ export function AnalyticsDashboard() {
 }
 
 /* ------------------------------------------------------------------ */
+
+/** Shared with app/analytics/loading.tsx, so the page does not jump when
+ *  the loading screen hands over. */
+export function AnalyticsHeader() {
+  return (
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-rule bg-card px-4 sm:px-6">
+      <Link href="/" className="flex shrink-0 items-center gap-2.5">
+        <Mark />
+        <span className="display-mark text-[13px] leading-none">MonoEdge</span>
+      </Link>
+      <span aria-hidden className="h-5 w-px bg-rule" />
+      <span className="label-mono text-foreground">Analytics</span>
+
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1.5 px-2.5 text-[12px] text-muted-foreground hover:text-foreground"
+        >
+          <Link href="/">
+            <ArrowLeft className="size-3.5" />
+            <span className="hidden sm:inline">Board</span>
+          </Link>
+        </Button>
+        <ThemeToggle />
+        <span aria-hidden className="h-5 w-px bg-rule" />
+        <UserMenu />
+      </div>
+    </header>
+  );
+}
 
 function Card({
   title,
@@ -934,7 +951,7 @@ function Method({ team, notDue }: { team: PersonStats; notDue: number }) {
   );
 }
 
-function DashboardSkeleton() {
+export function DashboardSkeleton() {
   return (
     <div className="space-y-5" aria-busy>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

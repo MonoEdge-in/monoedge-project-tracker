@@ -3,7 +3,7 @@ import "server-only";
 import { TEAM } from "@/lib/constants";
 import { str } from "@/lib/sheet-mapping";
 import type { Member, Role } from "@/lib/types";
-import { getTab, readConfig, readRange, writeRanges, SheetError } from "./sheets";
+import { getTab, readConfig, readRanges, writeRanges, SheetError } from "./sheets";
 
 /**
  * The roster, kept in a `Team` tab in the same spreadsheet as the work.
@@ -74,7 +74,29 @@ const PALETTE = [
  * short enough that removing someone is still same-minute.
  */
 const CACHE_TTL_MS = 60_000;
-let cache: { at: number; members: Member[] } | null = null;
+let cache: {
+  at: number;
+  members: Member[];
+  /**
+   * Each member's actual row. Not derivable from their position in
+   * `members`: a cleared row in the middle of the tab is skipped when
+   * reading, so counting would land every write below it one row high —
+   * onto somebody else's row, role and all.
+   */
+  rowOf: Map<Member, number>;
+  /** The first row below everything in the tab, blank rows included. */
+  nextRow: number;
+} | null = null;
+
+/**
+ * When this instance last recorded each address as seen. "Last Seen" was
+ * written on every authenticated request — every page load, save and
+ * 25-second board refresh — costing a Sheets write each time from a quota of
+ * sixty a minute. Ten minutes is precise enough for a column that answers
+ * "is this person still using the tracker".
+ */
+const SEEN_EVERY_MS = 10 * 60_000;
+const seenAt = new Map<string, number>();
 
 export const invalidateTeamCache = () => {
   cache = null;
@@ -159,14 +181,6 @@ async function ctx() {
   return { config, tab: meta.title };
 }
 
-async function ensureHeaders(c: Awaited<ReturnType<typeof ctx>>) {
-  const header = (await readRange(c.config, c.tab, `A1:${LAST_COL}1`))[0] ?? [];
-  if (str(header[0])) return;
-  await writeRanges(c.config, c.tab, [
-    { a1: `A1:${LAST_COL}1`, values: [HEADERS] },
-  ]);
-}
-
 /**
  * The roster as the sheet has it. An empty tab is seeded from the TEAM
  * constant so the founding five keep their roles and colours instead of
@@ -178,20 +192,30 @@ export async function loadTeam(force = false): Promise<Member[]> {
   }
 
   const c = await ctx();
-  await ensureHeaders(c);
-
-  const rows = await readRange(
-    c.config,
-    c.tab,
+  // Heading and roster in one request rather than two.
+  const [header, rows] = await readRanges(c.config, c.tab, [
+    `A1:${LAST_COL}1`,
     `A${FIRST_DATA_ROW}:${LAST_COL}`,
-  );
-  let members = rows
-    .map(rowToMember)
-    .filter((m): m is Member => m !== null);
+  ]);
+  if (!str(header[0]?.[0])) {
+    await writeRanges(c.config, c.tab, [
+      { a1: `A1:${LAST_COL}1`, values: [HEADERS] },
+    ]);
+  }
+
+  let members: Member[] = [];
+  const rowOf = new Map<Member, number>();
+  rows.forEach((r, i) => {
+    const m = rowToMember(r);
+    if (!m) return;
+    members.push(m);
+    rowOf.set(m, FIRST_DATA_ROW + i);
+  });
 
   if (!members.length) {
     const now = new Date().toISOString();
     members = TEAM.map((m) => ({ ...m, active: true }));
+    members.forEach((m, i) => rowOf.set(m, FIRST_DATA_ROW + i));
     await writeRanges(c.config, c.tab, [
       {
         a1: `A${FIRST_DATA_ROW}:${LAST_COL}${FIRST_DATA_ROW + members.length - 1}`,
@@ -200,7 +224,12 @@ export async function loadTeam(force = false): Promise<Member[]> {
     ]);
   }
 
-  cache = { at: Date.now(), members };
+  cache = {
+    at: Date.now(),
+    members,
+    rowOf,
+    nextRow: FIRST_DATA_ROW + Math.max(rows.length, members.length),
+  };
   return members;
 }
 
@@ -240,24 +269,38 @@ export async function resolveOrProvision(
 ): Promise<Member> {
   const key = normalise(email);
   const members = await loadTeam();
+  const rowOf = cache?.rowOf ?? new Map<Member, number>();
 
   const existing = members.find((m) => m.email === key);
   const now = new Date().toISOString();
-  const c = await ctx();
 
   if (existing) {
-    const row = FIRST_DATA_ROW + members.indexOf(existing);
-    await writeRanges(c.config, c.tab, [
-      { a1: `${colLetter(COL.lastSeen)}${row}`, values: [[now]] },
-    ]);
+    // The common case — someone already on the roster — now usually costs
+    // no request at all.
+    const row = rowOf.get(existing);
+    const last = seenAt.get(key) ?? 0;
+    if (row && Date.now() - last >= SEEN_EVERY_MS) {
+      seenAt.set(key, Date.now());
+      const c = await ctx();
+      await writeRanges(c.config, c.tab, [
+        { a1: `${colLetter(COL.lastSeen)}${row}`, values: [[now]] },
+      ]).catch((e) => {
+        // A missed timestamp must never sign someone out.
+        seenAt.delete(key);
+        console.error("[tracker] could not record Last Seen", e);
+      });
+    }
     return existing;
   }
+
+  const c = await ctx();
 
   const name = displayName?.trim() || key.split("@")[0];
   const claim = claimable(members, name);
 
-  if (claim) {
-    const row = FIRST_DATA_ROW + members.indexOf(claim);
+  const claimRow = claim && rowOf.get(claim);
+  if (claim && claimRow) {
+    const row = claimRow;
     const filled: Member = { ...claim, email: key };
     await writeRanges(c.config, c.tab, [
       {
@@ -281,10 +324,11 @@ export async function resolveOrProvision(
     active: true,
   };
 
-  const row = FIRST_DATA_ROW + members.length;
+  const row = cache?.nextRow ?? FIRST_DATA_ROW + members.length;
   await writeRanges(c.config, c.tab, [
     { a1: `A${row}:${LAST_COL}${row}`, values: [memberToRow(created, now, now)] },
   ]);
+  seenAt.set(key, Date.now());
   invalidateTeamCache();
   return created;
 }

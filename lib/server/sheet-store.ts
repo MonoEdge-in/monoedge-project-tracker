@@ -84,8 +84,12 @@ function assertColumns(c: Ctx, header: unknown[]): void {
 
 const HEADER_ROW = `A1:${LAST_COL}1`;
 
-async function ensureHeaders(c: Ctx): Promise<void> {
-  const header = (await readRange(c.config, c.tab, HEADER_ROW))[0] ?? [];
+async function ensureHeaders(
+  c: Ctx,
+  /** The heading row, when the caller already fetched it with its data. */
+  known?: unknown[],
+): Promise<void> {
+  const header = known ?? (await readRange(c.config, c.tab, HEADER_ROW))[0] ?? [];
   assertColumns(c, header);
   const missing = MANAGED_HEADERS.filter(
     ([col]) => str(header[colIndex(col)]) === "",
@@ -119,13 +123,13 @@ async function backfillIds(c: Ctx, items: WorkItem[]): Promise<void> {
 
 export async function loadItems(): Promise<LoadResult> {
   const c = await ctx();
-  await ensureHeaders(c);
-
-  const rows = await readRange(
-    c.config,
-    c.tab,
+  // Headings and rows in one request. The board polls this every 25
+  // seconds for every open tab, so a round trip saved here is saved a lot.
+  const [header, rows] = await readRanges(c.config, c.tab, [
+    HEADER_ROW,
     `A${FIRST_DATA_ROW}:${LAST_COL}`,
-  );
+  ]);
+  await ensureHeaders(c, header[0] ?? []);
 
   const warnings: string[] = [];
   const items = rows

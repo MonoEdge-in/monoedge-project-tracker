@@ -49,7 +49,9 @@ async function ensureTab() {
   if (ready) return config;
 
   try {
-    await getTab({ ...config, tabName: LOG_TAB });
+    // Fresh: this runs once per warm instance, and another instance may have
+    // created the tab since the cached list was taken.
+    await getTab({ ...config, tabName: LOG_TAB }, { fresh: true });
   } catch (e) {
     // getTab reports a missing tab as a 404. Anything else is a real
     // failure — auth, quota — and creating a tab would not fix it.
