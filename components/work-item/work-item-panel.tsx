@@ -18,8 +18,10 @@ import { cn } from "@/lib/utils";
 import { dueLabel, isOverdue, relativeTime } from "@/lib/dates";
 import type { WorkItem } from "@/lib/types";
 import { StatusChip, WorkItemRef } from "@/components/shared/badges";
+import { formulaProblem } from "@/lib/validation";
 import {
   AssigneeSelect,
+  FormulaError,
   DateField,
   Field,
   PrioritySelect,
@@ -77,6 +79,13 @@ function PanelBody({
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description);
   const [notes, setNotes] = useState(item.notes);
+
+  // Checked live against what is typed. A field with the problem is simply
+  // not saved on blur: the text stays put, with the reason under it, so the
+  // fix is one keystroke rather than retyping.
+  const formula = formulaProblem({ title, description, notes }, "update");
+  const blocked = (field: "title" | "description" | "notes") =>
+    formula?.field === field;
   const [storyPoints, setStoryPoints] = useState(
     item.storyPoints !== null && item.storyPoints !== undefined
       ? String(item.storyPoints)
@@ -102,14 +111,17 @@ function PanelBody({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onBlur={() => {
+            if (blocked("title")) return;
             const next = title.trim();
             if (next && next !== item.title) patch({ title: next });
             else if (!next) setTitle(item.title);
           }}
           aria-label="Task name"
+          aria-invalid={blocked("title")}
           placeholder="Name this task"
           className="-mx-1 rounded px-1 text-[17px] leading-snug font-semibold tracking-[-0.01em] hover:bg-muted/60 focus:bg-muted/60 focus-visible:outline-none"
         />
+        <FormulaError problem={formula} field="title" />
       </SheetHeader>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
@@ -118,11 +130,14 @@ function PanelBody({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             onBlur={() => {
+              if (blocked("description")) return;
               if (description !== item.description) patch({ description });
             }}
+            aria-invalid={blocked("description")}
             placeholder="What needs doing, and anything the next person should know."
             className="min-h-24 resize-y bg-card text-[13px] leading-relaxed"
           />
+          <FormulaError problem={formula} field="description" />
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
@@ -191,11 +206,14 @@ function PanelBody({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             onBlur={() => {
+              if (blocked("notes")) return;
               if (notes !== item.notes) patch({ notes });
             }}
+            aria-invalid={blocked("notes")}
             placeholder="Where this has got to, blockers, anything said in passing."
             className="min-h-20 resize-y bg-card text-[13px] leading-relaxed"
           />
+          <FormulaError problem={formula} field="notes" />
         </Field>
 
         <Separator />

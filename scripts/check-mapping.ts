@@ -1,4 +1,5 @@
 import {
+  checkHeaders,
   highestRef,
   itemToRow,
   resolveMember,
@@ -6,6 +7,7 @@ import {
   toIsoDate,
   toStoryPoints,
 } from "../lib/sheet-mapping";
+import { formulaProblem } from "../lib/validation";
 import type { Member } from "../lib/types";
 
 let pass = 0;
@@ -180,6 +182,107 @@ check("ambiguous resolved by initials", who("PS"), "priya-s");
 // The stored key column wins over whatever the readable column says.
 check("stored key wins", who("Priya Menon", "vismay"), "vismay");
 check("unknown stored key falls back to name", who("Priya Menon", "ghost"), "priya-m");
+
+// --- Column check. The heading row as the tracking tab has it today.
+const SHEET_HEADERS = [
+  "Tasks", "Description", "Primary Person", "Secondary Person", "Status",
+  "Notes", "Task Creation Date", "Task Started Date", "Task Planned Date",
+  "Task Actual Date", "Priority", "Functionality / Bug", "Item ID",
+  "Board Order", "Assignee Key", "Updated At", "Secondary Key", "Story Points",
+];
+const cols = (h: unknown[]) => checkHeaders(h).map((p) => p.col);
+
+check("the sheet as it is passes", cols(SHEET_HEADERS), []);
+check("a brand-new sheet with no headings passes", cols([]), []);
+check(
+  "app columns not written yet pass",
+  cols(SHEET_HEADERS.slice(0, 12)),
+  [],
+);
+check(
+  "wording and spacing are forgiven",
+  cols(["TASKS", "description ", "primary  person", "Secondary person", "status",
+    "notes", "Creation date", "Start date", "Due date", "Actual Date",
+    "priority", "functionality/bug"]),
+  [],
+);
+
+// The incident: two columns inserted, read with the old map. Replayed by
+// shifting the pre-insert layout's app columns under their old letters.
+const beforeInsert = [
+  "Tasks", "Description", "Primary Person", "Status", "Task Creation Date",
+  "Task Started Date", "Task Planned Date", "Task Actual Date", "Priority",
+  "Functionality / Bug", "Item ID", "Board Order", "Assignee Key", "Updated At",
+];
+check(
+  "the old layout under the new map is refused",
+  checkHeaders(beforeInsert).length > 0,
+  true,
+);
+
+const inserted = [...SHEET_HEADERS];
+inserted.splice(4, 0, "Reviewer");
+check(
+  "a new column inserted mid-sheet is caught where Status lands",
+  cols(inserted)[0],
+  "F",
+);
+check(
+  "an unfamiliar heading in its right place does not stop the board",
+  cols(["Work item", "Details", ...SHEET_HEADERS.slice(2)]),
+  [],
+);
+check(
+  "a team heading that names another column is refused",
+  cols(["Tasks", "Description", "Primary Person", "Secondary Person", "Notes"]),
+  ["E"],
+);
+
+const blankInserted = [...SHEET_HEADERS];
+blankInserted.splice(9, 0, "");
+check(
+  "a blank column inserted is caught by the column after it",
+  cols(blankInserted)[0],
+  "K",
+);
+
+const deleted = SHEET_HEADERS.filter((h) => h !== "Notes");
+check("a deleted column is caught", cols(deleted)[0], "F");
+
+const swapped = [...SHEET_HEADERS];
+[swapped[8], swapped[9]] = [swapped[9], swapped[8]];
+check("two dates swapped are both caught", cols(swapped), ["I", "J"]);
+
+const renamedAppColumn = [...SHEET_HEADERS];
+renamedAppColumn[12] = "ID";
+check("the app's own columns must match exactly", cols(renamedAppColumn), ["M"]);
+
+check(
+  "the problem names what was found and what belongs there",
+  checkHeaders(inserted)[0],
+  { col: "F", found: "Status", expected: "Notes" },
+);
+
+// --- Formula text. USER_ENTERED runs anything starting with "=".
+const formula = (f: Parameters<typeof formulaProblem>[0], when: "create" | "update" = "create") =>
+  formulaProblem(f, when);
+
+check("a normal title is fine", formula({ title: "Fix login" }), null);
+check(
+  "a title starting with = is refused",
+  formula({ title: '=IMPORTXML("http://x", "//a")' })?.message,
+  "A task cannot be added with an = sign at the start.",
+);
+check("leading spaces do not get round it", formula({ title: "   =1+1" })?.field, "title");
+check("= later in the text is fine", formula({ title: "Make a = b work" }), null);
+check("description is checked", formula({ description: "=HYPERLINK(1)" })?.field, "description");
+check("notes are checked", formula({ notes: "=A1" })?.message, "Notes cannot start with an = sign.");
+check(
+  "renaming says rename, not add",
+  formula({ title: "=x" }, "update")?.message,
+  "A task name cannot start with an = sign.",
+);
+check("a patch without text fields is fine", formula({}, "update"), null);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

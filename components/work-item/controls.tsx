@@ -55,6 +55,22 @@ export function Field({
   );
 }
 
+/** The inline "cannot start with =" message, under the field it is about. */
+export function FormulaError({
+  problem,
+  field,
+}: {
+  problem: { field: string; message: string } | null;
+  field: string;
+}) {
+  if (problem?.field !== field) return null;
+  return (
+    <p role="alert" className="text-[11.5px] text-destructive">
+      {problem.message}
+    </p>
+  );
+}
+
 export function StatusSelect({
   value,
   onChange,

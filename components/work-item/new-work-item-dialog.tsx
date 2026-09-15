@@ -15,9 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { todayIso } from "@/lib/dates";
 import { STARTED_STAGES } from "@/lib/constants";
+import { formulaProblem } from "@/lib/validation";
 import type { NewWorkItem, Priority, Status, WorkType } from "@/lib/types";
 import {
   AssigneeSelect,
+  FormulaError,
   DateField,
   Field,
   PrioritySelect,
@@ -98,7 +100,10 @@ function Composer({
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
     setDraft((d) => ({ ...d, [k]: v }));
 
-  const valid = draft.title.trim().length > 0;
+  // Shown as soon as it is typed, not on submit: the fix is one character
+  // and the person is already looking at the field.
+  const formula = formulaProblem(draft, "create");
+  const valid = draft.title.trim().length > 0 && !formula;
 
   function submit() {
     if (!valid) return;
@@ -143,8 +148,10 @@ function Composer({
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
             }}
             placeholder="Short and specific — what is being done"
+            aria-invalid={formula?.field === "title"}
             className="h-9 bg-card text-[13px]"
           />
+          <FormulaError problem={formula} field="title" />
         </Field>
 
         <Field label="Description">
@@ -152,8 +159,10 @@ function Composer({
             value={draft.description}
             onChange={(e) => set("description", e.target.value)}
             placeholder="Context the next person will need. Optional."
+            aria-invalid={formula?.field === "description"}
             className="min-h-20 resize-y bg-card text-[13px] leading-relaxed"
           />
+          <FormulaError problem={formula} field="description" />
         </Field>
 
         {/* Left column is about the work, right column is about people, so
@@ -219,8 +228,10 @@ function Composer({
             value={draft.notes}
             onChange={(e) => set("notes", e.target.value)}
             placeholder="Anything worth recording as the task moves. Optional."
+            aria-invalid={formula?.field === "notes"}
             className="min-h-16 resize-y bg-card text-[13px] leading-relaxed"
           />
+          <FormulaError problem={formula} field="notes" />
         </Field>
       </div>
 

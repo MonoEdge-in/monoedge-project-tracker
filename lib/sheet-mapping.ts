@@ -60,6 +60,116 @@ export const colIndex = (col: string) => col.charCodeAt(0) - 65;
 export const str = (v: unknown): string =>
   v === null || v === undefined ? "" : String(v).trim();
 
+type ColKey = keyof typeof COLS;
+
+/** Lowercase, single spaces, and "Functionality / Bug" == "functionality/bug". */
+const heading = (v: unknown) =>
+  str(v).toLowerCase().replace(/\s*\/\s*/g, "/").replace(/\s+/g, " ");
+
+const managedLabel = new Map(
+  MANAGED_HEADERS.map(([col, label]) => [col, heading(label)]),
+);
+
+/**
+ * What each column's heading may say.
+ *
+ * The app's own columns must carry exactly the label it wrote. The team's
+ * columns keep whatever wording people chose, so they are matched on the
+ * word that makes each one what it is — "planned", "status" — and never on
+ * a word two columns share: every date column contains "date" and "task",
+ * so neither decides anything.
+ */
+const HEADING: Record<ColKey, (h: string) => boolean> = {
+  title: (h) => /^(tasks?|task name|title)$/.test(h),
+  description: (h) => h.includes("descr"),
+  person: (h) => h.includes("primary") || /^(person|assignee|owner)$/.test(h),
+  secondaryPerson: (h) => h.includes("secondary") && !h.includes("key"),
+  status: (h) => h.includes("status"),
+  notes: (h) => /^notes?$/.test(h),
+  created: (h) => h.includes("creat"),
+  started: (h) => h.includes("start"),
+  planned: (h) => h.includes("plan") || h.includes("due"),
+  actual: (h) => h.includes("actual"),
+  priority: (h) => h.includes("priority"),
+  type: (h) => h.includes("functionality") || h.includes("bug") || h === "type",
+  id: (h) => h === managedLabel.get(COLS.id),
+  order: (h) => h === managedLabel.get(COLS.order),
+  assigneeKey: (h) => h === managedLabel.get(COLS.assigneeKey),
+  updatedAt: (h) => h === managedLabel.get(COLS.updatedAt),
+  secondaryKey: (h) => h === managedLabel.get(COLS.secondaryKey),
+  storyPoints: (h) => h === managedLabel.get(COLS.storyPoints),
+};
+
+/** What a column is, in words, for the message when it has moved. */
+const NAME: Record<ColKey, string> = {
+  title: "Tasks",
+  description: "Description",
+  person: "Primary Person",
+  secondaryPerson: "Secondary Person",
+  status: "Status",
+  notes: "Notes",
+  created: "Task Creation Date",
+  started: "Task Started Date",
+  planned: "Task Planned Date",
+  actual: "Task Actual Date",
+  priority: "Priority",
+  type: "Functionality / Bug",
+  id: "Item ID",
+  order: "Board Order",
+  assigneeKey: "Assignee Key",
+  updatedAt: "Updated At",
+  secondaryKey: "Secondary Key",
+  storyPoints: "Story Points",
+};
+
+export interface ColumnProblem {
+  col: string;
+  found: string;
+  expected: string;
+}
+
+const KEYS = Object.keys(COLS) as ColKey[];
+const APP_OWNED = new Set<ColKey>(
+  KEYS.filter((k) => managedLabel.has(COLS[k])),
+);
+
+/**
+ * Compares row 1 with the column map. Empty means every column is where the
+ * app expects it and reading or writing is safe.
+ *
+ * This is the check that would have caught the Priority/Type overwrite:
+ * two columns were inserted, the app still believed column K was Item ID,
+ * and it wrote ids over sixty rows of priorities. With this in place the
+ * same insert stops the app with a message naming the column instead.
+ *
+ * It refuses on evidence, not on unfamiliar wording, because a refusal stops
+ * the whole board for everyone:
+ *
+ * - The app's own columns must carry exactly the heading the app wrote.
+ * - The team's columns fail only when the heading is recognisably *another*
+ *   column's — "Status" sitting where Notes belongs. A heading worded in a
+ *   way nothing here recognises passes, since it is no sign of a shift.
+ *
+ * Moving a column still cannot slip through: whatever is inserted or
+ * deleted, the recognisable headings beside it, and the app's own columns
+ * after it, all land under the wrong letters. A blank heading passes too —
+ * the app fills in its own blank headings on load.
+ */
+export function checkHeaders(header: unknown[]): ColumnProblem[] {
+  return KEYS.flatMap((key) => {
+    const col = COLS[key];
+    const found = str(header[colIndex(col)]);
+    if (!found) return [];
+
+    const h = heading(found);
+    if (HEADING[key](h)) return [];
+
+    const misplaced =
+      APP_OWNED.has(key) || KEYS.some((other) => HEADING[other](h));
+    return misplaced ? [{ col, found, expected: NAME[key] }] : [];
+  });
+}
+
 /**
  * Sheets stores dates as whole days since 1899-12-30. Reading the formatted
  * text instead would give "6-Aug", which has no year and cannot be turned

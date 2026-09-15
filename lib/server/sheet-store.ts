@@ -5,6 +5,7 @@ import {
   FIRST_DATA_ROW,
   LAST_COL,
   MANAGED_HEADERS,
+  checkHeaders,
   colIndex,
   highestRef,
   itemToRow,
@@ -12,12 +13,14 @@ import {
   str,
 } from "@/lib/sheet-mapping";
 import type { Member, WorkItem } from "@/lib/types";
+import { formulaProblem } from "@/lib/validation";
 import { loadTeam } from "./team-store";
 import {
   deleteRow,
   getTab,
   readConfig,
   readRange,
+  readRanges,
   SheetError,
   writeRanges,
   type SheetConfig,
@@ -58,8 +61,32 @@ async function ctx(): Promise<Ctx> {
  * load but only writes when something is actually missing, so connecting an
  * untouched sheet needs no manual preparation.
  */
+/**
+ * Stops everything if the tracking tab's columns are not where the column
+ * map says. Runs before any read that feeds a write — including the load,
+ * which backfills ids — because a shifted sheet read with the old map is
+ * garbage, and garbage written back overwrites real data.
+ */
+function assertColumns(c: Ctx, header: unknown[]): void {
+  const problems = checkHeaders(header);
+  if (!problems.length) return;
+
+  const detail = problems
+    .slice(0, 3)
+    .map((p) => `column ${p.col} is headed "${p.found}" but should be ${p.expected}`)
+    .join("; ");
+  throw new SheetError(
+    `The columns in "${c.tab}" have moved, so the tracker has stopped reading and writing it: ${detail}${problems.length > 3 ? `, and ${problems.length - 3} more` : ""}.`,
+    409,
+    "A column was probably inserted, deleted or moved in the sheet. Undo that, or have the app's column map (lib/sheet-mapping.ts) updated to match. Nothing was written.",
+  );
+}
+
+const HEADER_ROW = `A1:${LAST_COL}1`;
+
 async function ensureHeaders(c: Ctx): Promise<void> {
-  const header = (await readRange(c.config, c.tab, `A1:${LAST_COL}1`))[0] ?? [];
+  const header = (await readRange(c.config, c.tab, HEADER_ROW))[0] ?? [];
+  assertColumns(c, header);
   const missing = MANAGED_HEADERS.filter(
     ([col]) => str(header[colIndex(col)]) === "",
   );
@@ -109,12 +136,13 @@ export async function loadItems(): Promise<LoadResult> {
   return { items, warnings, tab: c.tab, members: c.team };
 }
 
+/** Also checks the columns: every update and delete finds its row first. */
 async function findRow(c: Ctx, id: string): Promise<number> {
-  const col = await readRange(
-    c.config,
-    c.tab,
+  const [header, col] = await readRanges(c.config, c.tab, [
+    HEADER_ROW,
     `${COLS.id}${FIRST_DATA_ROW}:${COLS.id}`,
-  );
+  ]);
+  assertColumns(c, header[0] ?? []);
   const idx = col.findIndex((r) => str(r?.[0]) === id);
   if (idx === -1) {
     throw new SheetError(
@@ -152,7 +180,18 @@ async function nextFreeRow(c: Ctx): Promise<number> {
   return FIRST_DATA_ROW + (gap === -1 ? rows.length : gap);
 }
 
+/** Refuses free text the tracking tab would run as a formula. Checked here,
+ *  at the write, so no caller can skip it. */
+function assertNoFormula(
+  fields: Partial<WorkItem>,
+  when: "create" | "update",
+): void {
+  const problem = formulaProblem(fields, when);
+  if (problem) throw new SheetError(problem.message, 400);
+}
+
 export async function createItem(item: WorkItem): Promise<WorkItem> {
+  assertNoFormula(item, "create");
   const c = await ctx();
   await ensureHeaders(c);
 
@@ -207,6 +246,7 @@ export async function updateItem(
    */
   guard?: (current: WorkItem) => void,
 ): Promise<WorkItem> {
+  assertNoFormula(patch, "update");
   const c = await ctx();
   const rowNumber = await findRow(c, id);
   const row =
@@ -278,11 +318,11 @@ export async function removeItem(
  */
 export async function saveOrder(items: WorkItem[]): Promise<void> {
   const c = await ctx();
-  const ids = await readRange(
-    c.config,
-    c.tab,
+  const [header, ids] = await readRanges(c.config, c.tab, [
+    HEADER_ROW,
     `${COLS.id}${FIRST_DATA_ROW}:${COLS.id}`,
-  );
+  ]);
+  assertColumns(c, header[0] ?? []);
   const rowById = new Map<string, number>();
   ids.forEach((r, i) => {
     const v = str(r?.[0]);

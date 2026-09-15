@@ -328,6 +328,25 @@ export async function readRange(
   return data.values ?? [];
 }
 
+/**
+ * Several ranges in one request. Lets a write fetch the header row alongside
+ * the data it needs, so checking the columns costs no extra quota.
+ */
+export async function readRanges(
+  config: SheetConfig,
+  tab: string,
+  a1s: string[],
+): Promise<unknown[][][]> {
+  const ranges = a1s
+    .map((a1) => `ranges=${encodeURIComponent(`${quoteTab(tab)}!${a1}`)}`)
+    .join("&");
+  const data = await call<{ valueRanges?: { values?: unknown[][] }[] }>(
+    config,
+    `/values:batchGet?${ranges}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
+  );
+  return a1s.map((_, i) => data.valueRanges?.[i]?.values ?? []);
+}
+
 export async function writeRanges(
   config: SheetConfig,
   tab: string,
