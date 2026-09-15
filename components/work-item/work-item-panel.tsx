@@ -26,6 +26,7 @@ import {
   StatusSelect,
   TypeSelect,
 } from "./controls";
+import { ItemHistory } from "./item-history";
 
 export function WorkItemPanel({
   item,
@@ -243,6 +244,10 @@ function PanelBody({
             In&nbsp;Progress or Completed. Override either here.
           </p>
         </div>
+
+        <Separator />
+
+        <ItemHistory itemId={item.id} updatedAt={item.updatedAt} />
       </div>
 
       <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-rule bg-muted/40 px-5 py-3">

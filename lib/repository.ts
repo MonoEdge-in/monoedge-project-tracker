@@ -1,3 +1,4 @@
+import type { LogEntry } from "./audit";
 import type { Member, Role, WorkItem } from "./types";
 
 export interface LoadResult {
@@ -53,6 +54,11 @@ export interface TrackerRepository {
     expectedUpdatedAt?: string,
   ): Promise<WorkItem>;
   remove(id: string): Promise<void>;
+  /**
+   * One item's change log, newest first. Null when this backend keeps no
+   * log — the local draft has nobody signed in to credit a change to.
+   */
+  history(id: string): Promise<LogEntry[] | null>;
   /** Persist board order after a drag. */
   saveAll(items: WorkItem[]): Promise<void>;
   /**

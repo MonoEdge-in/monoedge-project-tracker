@@ -5,6 +5,7 @@ import {
   type LoadResult,
   type TrackerRepository,
 } from "../repository";
+import type { LogEntry } from "../audit";
 import type { WorkItem } from "../types";
 
 /**
@@ -80,6 +81,13 @@ export const remoteRepository: TrackerRepository = {
 
   async remove(id) {
     await send(`/api/items/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+
+  async history(id) {
+    const data = await send<{ entries: LogEntry[] }>(
+      `/api/items/${encodeURIComponent(id)}/history`,
+    );
+    return data?.entries ?? [];
   },
 
   async saveAll(items) {

@@ -9,6 +9,7 @@
     "lint": "eslint",
     "check:mapping": "tsx scripts/check-mapping.ts",
     "check:analytics": "tsx scripts/check-analytics.ts",
+    "check:audit": "tsx scripts/check-audit.ts",
     "setup:key": "tsx scripts/use-key.ts"
   },
   "dependencies": {

@@ -66,6 +66,10 @@ export const localRepository: TrackerRepository = {
     await settle(null);
   },
 
+  async history() {
+    return null;
+  },
+
   async saveAll(items) {
     write(items);
     await settle(null);

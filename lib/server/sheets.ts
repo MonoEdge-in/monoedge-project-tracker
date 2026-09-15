@@ -348,10 +348,41 @@ export async function writeRanges(
   });
 }
 
-// `appendRow` used to live here, wrapping Sheets' values.append. It is gone
-// on purpose: append targets the last row of the *table* Google detects, and
-// a structured Table keeps its range after rows are cleared, so new items
-// landed below a block of blank rows. sheet-store picks the row itself now.
+// Items do not use values.append: append targets the last row of the *table*
+// Google detects, and a structured Table keeps its range after rows are
+// cleared, so new items landed below a block of blank rows. sheet-store picks
+// the row itself instead.
+//
+// The change log is the one place append is exactly right. Rows are never
+// cleared, so the gap problem cannot arise, and the append is resolved on
+// Google's side — two people saving in the same second both get a row. Picking
+// the row ourselves would read the same "next free row" twice and one entry
+// would overwrite the other, which is the one thing an audit log must not do.
+export async function appendRows(
+  config: SheetConfig,
+  tab: string,
+  rows: unknown[][],
+): Promise<void> {
+  if (!rows.length) return;
+  const range = encodeURIComponent(`${quoteTab(tab)}!A1`);
+  await call(
+    config,
+    // RAW, not USER_ENTERED: a task titled "=IMPORTXML(...)" must land in
+    // the log as text, never run as a formula.
+    `/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    { method: "POST", body: JSON.stringify({ values: rows }) },
+  );
+}
+
+/** Creates a tab. Used for the change log, so it needs no manual setup. */
+export async function addTab(config: SheetConfig, title: string): Promise<void> {
+  await call(config, ":batchUpdate", {
+    method: "POST",
+    body: JSON.stringify({
+      requests: [{ addSheet: { properties: { title } } }],
+    }),
+  });
+}
 
 export async function deleteRow(
   config: SheetConfig,
