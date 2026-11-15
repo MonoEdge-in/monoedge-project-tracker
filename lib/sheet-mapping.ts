@@ -1,12 +1,6 @@
 import { TEAM } from "./constants";
-import type {
-  IsoDate,
-  Member,
-  Priority,
-  Status,
-  WorkItem,
-  WorkType,
-} from "./types";
+import { PRODUCTS } from "./types";
+import type { IsoDate, Member, Priority, Product, Status, WorkItem } from "./types";
 
 /**
  * Pure row <-> WorkItem mapping. No I/O and no credentials, so it can be
@@ -62,7 +56,7 @@ export const str = (v: unknown): string =>
 
 type ColKey = keyof typeof COLS;
 
-/** Lowercase, single spaces, and "Functionality / Bug" == "functionality/bug". */
+/** Lowercase, single spaces, and "Product / Bug" == "product/bug". */
 const heading = (v: unknown) =>
   str(v).toLowerCase().replace(/\s*\/\s*/g, "/").replace(/\s+/g, " ");
 
@@ -91,7 +85,11 @@ const HEADING: Record<ColKey, (h: string) => boolean> = {
   planned: (h) => h.includes("plan") || h.includes("due"),
   actual: (h) => h.includes("actual"),
   priority: (h) => h.includes("priority"),
-  type: (h) => h.includes("functionality") || h.includes("bug") || h === "type",
+  type: (h) =>
+    h.includes("product") ||
+    h.includes("functionality") ||
+    h.includes("bug") ||
+    h === "type",
   id: (h) => h === managedLabel.get(COLS.id),
   order: (h) => h === managedLabel.get(COLS.order),
   assigneeKey: (h) => h === managedLabel.get(COLS.assigneeKey),
@@ -113,7 +111,7 @@ const NAME: Record<ColKey, string> = {
   planned: "Task Planned Date",
   actual: "Task Actual Date",
   priority: "Priority",
-  type: "Functionality / Bug",
+  type: "Product",
   id: "Item ID",
   order: "Board Order",
   assigneeKey: "Assignee Key",
@@ -265,15 +263,23 @@ export const PRIORITY_ALIASES: Record<string, Priority> = {
   p3: "Low",
 };
 
-export const TYPE_ALIASES: Record<string, WorkType> = {
-  "product functionality": "Product Functionality",
-  product: "Product Functionality",
-  "client functionality": "Client Functionality",
-  client: "Client Functionality",
-  bug: "Bug",
-  defect: "Bug",
-  fix: "Bug",
+/** Legacy sheet values and loose spellings before the Product rename. */
+export const PRODUCT_ALIASES: Record<string, Product> = {
+  kaagaz: "Kaagaz",
+  soch: "Soch",
+  "business brain": "Business Brain",
+  "business-brain": "Business Brain",
 };
+
+export function parseProduct(raw: string): Product | null {
+  const k = key(raw);
+  if (!k) return null;
+  if (PRODUCT_ALIASES[k]) return PRODUCT_ALIASES[k];
+  return PRODUCTS.find((p) => key(p) === k) ?? null;
+}
+
+/** @deprecated Use PRODUCT_ALIASES */
+export const TYPE_ALIASES = PRODUCT_ALIASES;
 
 /**
  * Works out who a Primary Person cell refers to.
@@ -349,11 +355,9 @@ export function rowToItem(
   }
 
   const rawType = str(cell(COLS.type));
-  const type: WorkType | null = rawType
-    ? (TYPE_ALIASES[key(rawType)] ?? null)
-    : null;
+  const type: Product | null = rawType ? parseProduct(rawType) : null;
   if (rawType && !type) {
-    warnings.push(`Row ${rowNumber}: type "${rawType}" not recognised`);
+    warnings.push(`Row ${rowNumber}: product "${rawType}" not recognised`);
   }
 
   const personName = str(cell(COLS.person));

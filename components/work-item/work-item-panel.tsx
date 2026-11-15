@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { dueLabel, isOverdue, relativeTime } from "@/lib/dates";
 import type { WorkItem } from "@/lib/types";
 import { StatusChip, WorkItemRef } from "@/components/shared/badges";
-import { formulaProblem } from "@/lib/validation";
+import { workItemFieldProblem } from "@/lib/validation";
 import {
   AssigneeSelect,
   FormulaError,
@@ -83,9 +83,28 @@ function PanelBody({
   // Checked live against what is typed. A field with the problem is simply
   // not saved on blur: the text stays put, with the reason under it, so the
   // fix is one keystroke rather than retyping.
-  const formula = formulaProblem({ title, description, notes }, "update");
-  const blocked = (field: "title" | "description" | "notes") =>
-    formula?.field === field;
+  const fieldProblem = workItemFieldProblem(
+    {
+      title,
+      description,
+      notes,
+      plannedDate: item.plannedDate,
+      assigneeId: item.assigneeId,
+      secondaryAssigneeId: item.secondaryAssigneeId,
+      type: item.type,
+    },
+    "update",
+  );
+  const blocked = (
+    field:
+      | "title"
+      | "description"
+      | "notes"
+      | "plannedDate"
+      | "assigneeId"
+      | "secondaryAssigneeId"
+      | "type",
+  ) => fieldProblem?.field === field;
   const [storyPoints, setStoryPoints] = useState(
     item.storyPoints !== null && item.storyPoints !== undefined
       ? String(item.storyPoints)
@@ -121,7 +140,7 @@ function PanelBody({
           placeholder="Name this task"
           className="-mx-1 rounded px-1 text-[17px] leading-snug font-semibold tracking-[-0.01em] hover:bg-muted/60 focus:bg-muted/60 focus-visible:outline-none"
         />
-        <FormulaError problem={formula} field="title" />
+        <FormulaError problem={fieldProblem} field="title" />
       </SheetHeader>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
@@ -131,13 +150,18 @@ function PanelBody({
             onChange={(e) => setDescription(e.target.value)}
             onBlur={() => {
               if (blocked("description")) return;
-              if (description !== item.description) patch({ description });
+              const next = description.trim();
+              if (!next) {
+                setDescription(item.description);
+                return;
+              }
+              if (next !== item.description) patch({ description: next });
             }}
             aria-invalid={blocked("description")}
             placeholder="What needs doing, and anything the next person should know."
             className="min-h-24 resize-y bg-card text-[13px] leading-relaxed"
           />
-          <FormulaError problem={formula} field="description" />
+          <FormulaError problem={fieldProblem} field="description" />
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
@@ -150,8 +174,13 @@ function PanelBody({
           <Field label="Primary person">
             <AssigneeSelect
               value={item.assigneeId}
-              onChange={(assigneeId) => patch({ assigneeId })}
+              onChange={(assigneeId) => {
+                if (!assigneeId) return;
+                patch({ assigneeId });
+              }}
+              allowEmpty={false}
             />
+            <FormulaError problem={fieldProblem} field="assigneeId" />
           </Field>
           <Field label="Priority">
             <PrioritySelect
@@ -159,16 +188,28 @@ function PanelBody({
               onChange={(priority) => patch({ priority })}
             />
           </Field>
-          <Field label="Secondary person">
+          <Field label="Assigned by">
             <AssigneeSelect
-              label="Secondary person"
-              placeholder="Nobody"
+              label="Assigned by"
               value={item.secondaryAssigneeId}
-              onChange={(secondaryAssigneeId) => patch({ secondaryAssigneeId })}
+              onChange={(secondaryAssigneeId) => {
+                if (!secondaryAssigneeId) return;
+                patch({ secondaryAssigneeId });
+              }}
+              allowEmpty={false}
             />
+            <FormulaError problem={fieldProblem} field="secondaryAssigneeId" />
           </Field>
-          <Field label="Functionality / Bug">
-            <TypeSelect value={item.type} onChange={(type) => patch({ type })} />
+          <Field label="Product">
+            <TypeSelect
+              value={item.type}
+              onChange={(type) => {
+                if (!type) return;
+                patch({ type });
+              }}
+              allowEmpty={false}
+            />
+            <FormulaError problem={fieldProblem} field="type" />
           </Field>
           <Field label="Story points">
             <Input
@@ -213,7 +254,7 @@ function PanelBody({
             placeholder="Where this has got to, blockers, anything said in passing."
             className="min-h-20 resize-y bg-card text-[13px] leading-relaxed"
           />
-          <FormulaError problem={formula} field="notes" />
+          <FormulaError problem={fieldProblem} field="notes" />
         </Field>
 
         <Separator />
@@ -245,11 +286,18 @@ function PanelBody({
               onChange={(startedDate) => patch({ startedDate })}
               readOnlyHint="auto"
             />
-            <DateField
-              label="Planned"
-              value={item.plannedDate}
-              onChange={(plannedDate) => patch({ plannedDate })}
-            />
+            <div className="space-y-0">
+              <DateField
+                label="End date"
+                value={item.plannedDate}
+                onChange={(plannedDate) => {
+                  if (!plannedDate) return;
+                  patch({ plannedDate });
+                }}
+                ariaInvalid={blocked("plannedDate")}
+              />
+              <FormulaError problem={fieldProblem} field="plannedDate" />
+            </div>
             <DateField
               label="Actual"
               value={item.actualDate}

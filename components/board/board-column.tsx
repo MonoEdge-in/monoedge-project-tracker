@@ -2,7 +2,8 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Plus } from "lucide-react";
+import { motion } from "motion/react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +12,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { BoardColumnDef } from "@/lib/constants";
+import type { ColumnDateSort } from "@/lib/store";
 import type { Status, WorkItem } from "@/lib/types";
 import { SortableWorkItemCard } from "./work-item-card";
 
@@ -23,6 +25,9 @@ export function BoardColumn({
   onAdd,
   onStatus,
   isDropTarget,
+  dateSort,
+  onToggleDateSort,
+  enterIndex = 0,
   /** Swimlane mode: empty columns collapse instead of holding a full height. */
   dense = false,
 }: {
@@ -33,6 +38,9 @@ export function BoardColumn({
   onAdd: (column: BoardColumnDef) => void;
   onStatus: (id: string, status: Status) => void;
   isDropTarget: boolean;
+  dateSort: ColumnDateSort | null;
+  onToggleDateSort: () => void;
+  enterIndex?: number;
   dense?: boolean;
 }) {
   const { setNodeRef } = useDroppable({
@@ -40,10 +48,28 @@ export function BoardColumn({
     data: { type: "column", columnId: column.id },
   });
   const empty = items.length === 0;
+  const canAdd = column.id === "yet-to-start";
+  const SortIcon =
+    dateSort === "asc" ? ArrowUp : dateSort === "desc" ? ArrowDown : ArrowUpDown;
+  const sortLabel =
+    dateSort === "asc"
+      ? "Sorted by date, oldest first. Click for newest first."
+      : dateSort === "desc"
+        ? "Sorted by date, newest first. Click for manual order."
+        : column.id === "completed"
+          ? "Sort by finish date"
+          : "Sort by end date";
 
   return (
-    <section
+    <motion.section
       data-column={column.id}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.48,
+        delay: enterIndex * 0.055,
+        ease: [0.22, 1, 0.36, 1],
+      }}
       className={cn(
         "flex flex-col",
         dense
@@ -78,24 +104,38 @@ export function BoardColumn({
             </TooltipContent>
           </Tooltip>
 
-          <div className="flex shrink-0 items-center gap-1">
-            <span
-              className={cn(
-                "font-mono text-[11px] font-semibold tabular",
-                empty ? "text-muted-foreground/50" : "text-muted-foreground",
-              )}
-            >
-              {items.length}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6 text-muted-foreground hover:text-foreground"
-              onClick={() => onAdd(column)}
-              aria-label={`Add a work item to ${column.label}`}
-            >
-              <Plus className="size-3.5" />
-            </Button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onToggleDateSort}
+                  aria-label={sortLabel}
+                  className={cn(
+                    "flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-md px-1 font-mono text-[11px] font-semibold tabular transition-colors",
+                    "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                    dateSort && "bg-muted/60 text-foreground",
+                  )}
+                >
+                  <span className={empty ? "text-muted-foreground/50" : undefined}>
+                    {items.length}
+                  </span>
+                  <SortIcon className="size-3 shrink-0 opacity-70" aria-hidden />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{sortLabel}</TooltipContent>
+            </Tooltip>
+            {canAdd ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6 text-muted-foreground hover:text-foreground"
+                onClick={() => onAdd(column)}
+                aria-label={`Add a work item to ${column.label}`}
+              >
+                <Plus className="size-3.5" />
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -127,19 +167,31 @@ export function BoardColumn({
           (dense ? (
             // In swimlanes an empty stage is the common case, so it stays a
             // quiet strip rather than repeated invitations to add work.
-            <button
-              type="button"
-              onClick={() => onAdd(column)}
-              aria-label={`Add a work item to ${column.label}`}
-              className={cn(
-                "h-[30px] w-full rounded-md border border-dashed border-rule-strong/50 text-[11px] text-transparent transition-colors",
-                "hover:border-primary/40 hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                isDropTarget && "border-primary/50 text-muted-foreground",
-              )}
-            >
-              {isDropTarget ? "Drop here" : "Add"}
-            </button>
-          ) : (
+            canAdd ? (
+              <button
+                type="button"
+                onClick={() => onAdd(column)}
+                aria-label={`Add a work item to ${column.label}`}
+                className={cn(
+                  "h-[30px] w-full rounded-md border border-dashed border-rule-strong/50 text-[11px] text-transparent transition-colors",
+                  "hover:border-primary/40 hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                  isDropTarget && "border-primary/50 text-muted-foreground",
+                )}
+              >
+                {isDropTarget ? "Drop here" : "Add"}
+              </button>
+            ) : (
+              <div
+                aria-hidden={!isDropTarget}
+                className={cn(
+                  "h-[30px] w-full rounded-md border border-dashed border-rule-strong/50",
+                  isDropTarget && "text-center text-[11px] text-muted-foreground",
+                )}
+              >
+                {isDropTarget ? "Drop here" : null}
+              </div>
+            )
+          ) : canAdd ? (
             <button
               type="button"
               onClick={() => onAdd(column)}
@@ -150,8 +202,17 @@ export function BoardColumn({
             >
               {isDropTarget ? "Drop here" : "Nothing here — add one"}
             </button>
+          ) : (
+            <div
+              className={cn(
+                "flex min-h-24 w-full flex-1 items-center justify-center rounded-md border border-dashed border-rule-strong/60 text-[11px] text-muted-foreground",
+                isDropTarget && "border-primary/50 bg-brand-tint",
+              )}
+            >
+              {isDropTarget ? "Drop here" : "Nothing here"}
+            </div>
           ))}
       </div>
-    </section>
+    </motion.section>
   );
 }

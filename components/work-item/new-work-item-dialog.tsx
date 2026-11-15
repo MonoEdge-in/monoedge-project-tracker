@@ -15,8 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { todayIso } from "@/lib/dates";
 import { STARTED_STAGES } from "@/lib/constants";
-import { formulaProblem } from "@/lib/validation";
-import type { NewWorkItem, Priority, Status, WorkType } from "@/lib/types";
+import { MAX_TITLE_WORDS, workItemFieldProblem } from "@/lib/validation";
+import type { NewWorkItem, Priority, Product, Status } from "@/lib/types";
 import {
   AssigneeSelect,
   FormulaError,
@@ -34,7 +34,7 @@ interface Draft {
   secondaryAssigneeId: string | null;
   status: Status;
   priority: Priority;
-  type: WorkType | null;
+  type: Product | null;
   plannedDate: string | null;
   storyPoints: number | null;
   notes: string;
@@ -102,8 +102,8 @@ function Composer({
 
   // Shown as soon as it is typed, not on submit: the fix is one character
   // and the person is already looking at the field.
-  const formula = formulaProblem(draft, "create");
-  const valid = draft.title.trim().length > 0 && !formula;
+  const fieldProblem = workItemFieldProblem(draft, "create");
+  const valid = !fieldProblem;
 
   function submit() {
     if (!valid) return;
@@ -148,25 +148,27 @@ function Composer({
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
             }}
             placeholder="Short and specific — what is being done"
-            aria-invalid={formula?.field === "title"}
+            aria-invalid={fieldProblem?.field === "title"}
             className="h-9 bg-card text-[13px]"
           />
-          <FormulaError problem={formula} field="title" />
+          <FormulaError problem={fieldProblem} field="title" />
+          <p className="font-mono text-[10px] text-muted-foreground/70">
+            {MAX_TITLE_WORDS} words max
+          </p>
         </Field>
 
         <Field label="Description">
           <Textarea
             value={draft.description}
             onChange={(e) => set("description", e.target.value)}
-            placeholder="Context the next person will need. Optional."
-            aria-invalid={formula?.field === "description"}
+            placeholder="Context the next person will need"
+            aria-invalid={fieldProblem?.field === "description"}
             className="min-h-20 resize-y bg-card text-[13px] leading-relaxed"
           />
-          <FormulaError problem={formula} field="description" />
+          <FormulaError problem={fieldProblem} field="description" />
         </Field>
 
-        {/* Left column is about the work, right column is about people, so
-            Secondary person reads as a continuation of Primary person. */}
+        {/* Left column is about the work, right column is about people. */}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Status">
             <StatusSelect
@@ -178,7 +180,9 @@ function Composer({
             <AssigneeSelect
               value={draft.assigneeId}
               onChange={(v) => set("assigneeId", v)}
+              allowEmpty={false}
             />
+            <FormulaError problem={fieldProblem} field="assigneeId" />
           </Field>
           <Field label="Priority">
             <PrioritySelect
@@ -186,16 +190,22 @@ function Composer({
               onChange={(v) => set("priority", v)}
             />
           </Field>
-          <Field label="Secondary person">
+          <Field label="Assigned by">
             <AssigneeSelect
-              label="Secondary person"
-              placeholder="Nobody"
+              label="Assigned by"
               value={draft.secondaryAssigneeId}
               onChange={(v) => set("secondaryAssigneeId", v)}
+              allowEmpty={false}
             />
+            <FormulaError problem={fieldProblem} field="secondaryAssigneeId" />
           </Field>
-          <Field label="Functionality / Bug">
-            <TypeSelect value={draft.type} onChange={(v) => set("type", v)} />
+          <Field label="Product">
+            <TypeSelect
+              value={draft.type}
+              onChange={(v) => set("type", v)}
+              allowEmpty={false}
+            />
+            <FormulaError problem={fieldProblem} field="type" />
           </Field>
           <Field label="Story points">
             <Input
@@ -216,11 +226,15 @@ function Composer({
               className="h-9 bg-card font-mono text-[13px]"
             />
           </Field>
-          <DateField
-            label="Planned date"
-            value={draft.plannedDate}
-            onChange={(v) => set("plannedDate", v)}
-          />
+          <div>
+            <DateField
+              label="End date"
+              value={draft.plannedDate}
+              onChange={(v) => set("plannedDate", v)}
+              ariaInvalid={fieldProblem?.field === "plannedDate"}
+            />
+            <FormulaError problem={fieldProblem} field="plannedDate" />
+          </div>
         </div>
 
         <Field label="Notes">
@@ -228,10 +242,10 @@ function Composer({
             value={draft.notes}
             onChange={(e) => set("notes", e.target.value)}
             placeholder="Anything worth recording as the task moves. Optional."
-            aria-invalid={formula?.field === "notes"}
+            aria-invalid={fieldProblem?.field === "notes"}
             className="min-h-16 resize-y bg-card text-[13px] leading-relaxed"
           />
-          <FormulaError problem={formula} field="notes" />
+          <FormulaError problem={fieldProblem} field="notes" />
         </Field>
       </div>
 

@@ -75,8 +75,9 @@ export const WorkItemCard = forwardRef<HTMLDivElement, CardProps>(
           // scrolling — and since the card clips its own overflow, the title
           // and status chip get sliced off mid-line.
           "group relative w-full shrink-0 touch-none overflow-hidden rounded-lg border border-rule bg-card text-left",
-          "shadow-[0_1px_2px_rgba(12,27,20,0.04)] transition-[border-color,box-shadow] duration-150",
-          "hover:border-rule-strong hover:shadow-[0_2px_10px_rgba(12,27,20,0.07)]",
+          "shadow-[0_1px_2px_rgba(12,27,20,0.04)] transition-[border-color,box-shadow,transform] duration-200 ease-out",
+          "hover:border-rule-strong hover:shadow-[0_6px_16px_rgba(12,27,20,0.08)]",
+          !dragging && !overlay && "hover:-translate-y-px",
           "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:outline-none",
           dragging && "opacity-40",
           overlay &&

@@ -1,4 +1,4 @@
-import type { Member, Priority, Status, WorkType } from "./types";
+import type { Member, Priority, Product, Status } from "./types";
 
 /**
  * The founding team — a *seed*, not the roster.
@@ -92,9 +92,10 @@ export interface BoardColumnDef {
 }
 
 /**
- * Four columns. PR Created lives inside In progress rather than as its own
- * column, so the board stays readable without losing the precise status.
- * Change a card's exact status from the card menu or the detail panel.
+ * Three columns. PR Created and In Testing live inside In progress rather
+ * than as their own columns, so the board stays readable without losing the
+ * precise status. Change a card's exact status from the card menu or the
+ * detail panel.
  */
 export const COLUMNS: BoardColumnDef[] = [
   {
@@ -109,17 +110,9 @@ export const COLUMNS: BoardColumnDef[] = [
     id: "in-progress",
     label: "In progress",
     primary: "In Progress",
-    statuses: ["In Progress", "PR Created"],
+    statuses: ["In Progress", "PR Created", "In Testing"],
     color: STATUS_TOKENS["In Progress"].color,
-    hint: "Being built, or up for review as a pull request",
-  },
-  {
-    id: "in-testing",
-    label: "In testing",
-    primary: "In Testing",
-    statuses: ["In Testing"],
-    color: STATUS_TOKENS["In Testing"].color,
-    hint: "Being verified on the deployed build",
+    hint: "Being built, in review, or being verified on a deploy",
   },
   {
     id: "completed",
@@ -156,12 +149,11 @@ export const ACTIVE_STAGES: Status[] = [
   "In Testing",
 ];
 
-/**
- * Past these, a missed planned date is history rather than a problem.
- * Only Completed qualifies: something sitting in testing is still owed, so
- * it counts as in flight and can run late like anything else.
- */
+/** Past these, a missed planned date is history rather than a problem. */
 export const TERMINAL_STAGES: Status[] = ["Completed"];
+
+/** Completed work older than this drops off the board (still in the sheet). */
+export const COMPLETED_ARCHIVE_AFTER_DAYS = 14;
 
 /** Statuses that mean work has begun, for the automatic start date. */
 export const STARTED_STAGES: Status[] = [
@@ -175,7 +167,6 @@ export const FLOW: Status[] = [
   "Yet to Start",
   "In Progress",
   "PR Created",
-  "In Testing",
   "Completed",
 ];
 
@@ -186,11 +177,14 @@ export const PRIORITY_TOKENS: Record<Priority, Token> = {
   Low: { color: "#7C8B82" },
 };
 
-/** Short forms so a dense card does not carry a 21-character label. */
-export const TYPE_TOKENS: Record<WorkType, Token & { short: string }> = {
-  "Product Functionality": { color: "#1E4E8C", short: "Product" },
-  "Client Functionality": { color: "#8A5A20", short: "Client" },
-  Bug: { color: "#C6304A", short: "Bug" },
+/** Colours aligned with the sheet chips for each product. */
+export const PRODUCT_TOKENS: Record<Product, Token & { short: string }> = {
+  Kaagaz: { color: "#1E4E8C", short: "Kaagaz" },
+  Soch: { color: "#8A5A20", short: "Soch" },
+  "Business Brain": { color: "#9E2F4E", short: "B. Brain" },
 };
+
+/** @deprecated Use PRODUCT_TOKENS */
+export const TYPE_TOKENS = PRODUCT_TOKENS;
 
 export const REF_PREFIX = "MON";

@@ -21,15 +21,17 @@ export const STATUSES = [
 
 export const PRIORITIES = ["Critical", "High", "Medium", "Low"] as const;
 
-export const WORK_TYPES = [
-  "Product Functionality",
-  "Client Functionality",
-  "Bug",
-] as const;
+/** Matches the Product dropdown in column L of the tracking sheet. */
+export const PRODUCTS = ["Kaagaz", "Soch", "Business Brain"] as const;
 
 export type Status = (typeof STATUSES)[number];
 export type Priority = (typeof PRIORITIES)[number];
-export type WorkType = (typeof WORK_TYPES)[number];
+export type Product = (typeof PRODUCTS)[number];
+
+/** @deprecated Use Product */
+export type WorkType = Product;
+/** @deprecated Use PRODUCTS */
+export const WORK_TYPES = PRODUCTS;
 
 /** ISO date, yyyy-mm-dd. Null means the cell is blank in the sheet. */
 export type IsoDate = string;
@@ -46,9 +48,8 @@ export interface WorkItem {
   description: string;
   /** Col C — Primary Person. Holds a Member.id, or null when unassigned. */
   assigneeId: string | null;
-  /** Col D — Secondary Person. The second pair of hands on the task; null
-   *  when nobody is helping. Never doubles as the owner — the board, the
-   *  filters and the permission rules all read Primary Person. */
+  /** Col D — Secondary Person in the sheet; shown as Assigned by. Who raised
+   *  or handed off the work — distinct from Primary Person. */
   secondaryAssigneeId: string | null;
   /** Col E — Status */
   status: Status;
@@ -65,8 +66,8 @@ export interface WorkItem {
   actualDate: IsoDate | null;
   /** Col K — Priority */
   priority: Priority;
-  /** Col L — Functionality / Bug */
-  type: WorkType | null;
+  /** Col L — Product */
+  type: Product | null;
   /** Col R — Story Points (integer estimation, null when unestimated) */
   storyPoints: number | null;
 
@@ -121,10 +122,12 @@ export interface Filters {
   query: string;
   assigneeIds: string[];
   priorities: Priority[];
-  types: WorkType[];
+  types: Product[];
   /** Hide anything already shipped. */
   hideCompleted: boolean;
+  /** Include Completed work aged off the board (see COMPLETED_ARCHIVE_AFTER_DAYS). */
+  showArchived: boolean;
 }
 
-export type GroupBy = "none" | "assignee";
+export type GroupBy = "none" | "assignee" | "product";
 export type SyncState = "idle" | "syncing" | "synced" | "error";

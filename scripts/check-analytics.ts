@@ -1,4 +1,5 @@
 import { buildReport, daysBefore, daysBetween, measure } from "../lib/analytics";
+import { isArchivedCompleted } from "../lib/dates";
 import type { Member, Status, WorkItem } from "../lib/types";
 
 let pass = 0;

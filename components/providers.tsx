@@ -1,5 +1,6 @@
 "use client";
 
+import { MotionConfig } from "motion/react";
 import { ThemeProvider } from "next-themes";
 import { SessionProvider } from "next-auth/react";
 import type { Session } from "next-auth";
@@ -23,10 +24,12 @@ export function Providers({
         enableSystem
         disableTransitionOnChange
       >
-        <TooltipProvider delayDuration={250} skipDelayDuration={300}>
-          {children}
-          <Toaster position="bottom-right" closeButton />
-        </TooltipProvider>
+        <MotionConfig reducedMotion="user">
+          <TooltipProvider delayDuration={250} skipDelayDuration={300}>
+            {children}
+            <Toaster position="bottom-right" closeButton />
+          </TooltipProvider>
+        </MotionConfig>
       </ThemeProvider>
     </SessionProvider>
   );
