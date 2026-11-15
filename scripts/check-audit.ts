@@ -51,8 +51,8 @@ check("planned date moved", diff({ plannedDate: "2026-09-17" }), [
 check("primary person logged by name", diff({ assigneeId: "tushar" }), [
   { field: "Primary person", from: "Vismay Rathod", to: "Tushar" },
 ]);
-check("secondary person added", diff({ secondaryAssigneeId: "tushar" }), [
-  { field: "Secondary person", from: "", to: "Tushar" },
+check("assigned by added", diff({ secondaryAssigneeId: "tushar" }), [
+  { field: "Assigned by", from: "", to: "Tushar" },
 ]);
 check("someone no longer on the roster still prints", diff({ assigneeId: "ghost" }), [
   { field: "Primary person", from: "Vismay Rathod", to: "ghost" },

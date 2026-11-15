@@ -45,14 +45,14 @@ type Tracked = Exclude<
  */
 const FIELDS: Record<Tracked, { label: string; kind: "text" | "person" | "date" | "value" }> = {
   assigneeId: { label: "Primary person", kind: "person" },
-  secondaryAssigneeId: { label: "Secondary person", kind: "person" },
+  secondaryAssigneeId: { label: "Assigned by", kind: "person" },
   status: { label: "Status", kind: "value" },
   plannedDate: { label: "Planned date", kind: "date" },
   startedDate: { label: "Started date", kind: "date" },
   actualDate: { label: "Actual date", kind: "date" },
   createdDate: { label: "Created date", kind: "date" },
   priority: { label: "Priority", kind: "value" },
-  type: { label: "Functionality / Bug", kind: "value" },
+  type: { label: "Product", kind: "value" },
   storyPoints: { label: "Story points", kind: "value" },
   title: { label: "Task", kind: "text" },
   description: { label: "Description", kind: "text" },

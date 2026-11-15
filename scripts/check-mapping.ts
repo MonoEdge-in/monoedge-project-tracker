@@ -2,12 +2,22 @@ import {
   checkHeaders,
   highestRef,
   itemToRow,
+  parseProduct,
   resolveMember,
   rowToItem,
   toIsoDate,
   toStoryPoints,
 } from "../lib/sheet-mapping";
-import { formulaProblem } from "../lib/validation";
+import {
+  MAX_TITLE_WORDS,
+  formulaProblem,
+  workItemFieldProblem,
+  wordCount,
+} from "../lib/validation";
+import { COMPLETED_ARCHIVE_AFTER_DAYS } from "../lib/constants";
+import { boardSortDay, isArchivedCompleted } from "../lib/dates";
+import { sortColumnByDate } from "../lib/store";
+import type { WorkItem } from "../lib/types";
 import type { Member } from "../lib/types";
 
 let pass = 0;
@@ -92,6 +102,10 @@ check("actual stays null", real?.actualDate, null);
 check("priority", real?.priority, "High");
 check("no type", real?.type, null);
 check("unassigned", real?.assigneeId, null);
+
+check("product from sheet", parseProduct("Soch"), "Soch");
+check("product case insensitive", parseProduct("  business brain "), "Business Brain");
+check("legacy functionality not a product", parseProduct("Product Functionality"), null);
 check("row number retained", real?.sheetRow, 2);
 
 // --- Completely empty rows are skipped, not imported as ghosts.
@@ -112,7 +126,7 @@ const item = {
   plannedDate: "2026-08-22",
   actualDate: null,
   priority: "High" as const,
-  type: "Product Functionality" as const,
+  type: "Kaagaz" as const,
   storyPoints: 5,
   sheetRow: 8,
   order: 3,
@@ -187,7 +201,7 @@ check("unknown stored key falls back to name", who("Priya Menon", "ghost"), "pri
 const SHEET_HEADERS = [
   "Tasks", "Description", "Primary Person", "Secondary Person", "Status",
   "Notes", "Task Creation Date", "Task Started Date", "Task Planned Date",
-  "Task Actual Date", "Priority", "Functionality / Bug", "Item ID",
+  "Task Actual Date", "Priority", "Product", "Item ID",
   "Board Order", "Assignee Key", "Updated At", "Secondary Key", "Story Points",
 ];
 const cols = (h: unknown[]) => checkHeaders(h).map((p) => p.col);
@@ -212,7 +226,7 @@ check(
 const beforeInsert = [
   "Tasks", "Description", "Primary Person", "Status", "Task Creation Date",
   "Task Started Date", "Task Planned Date", "Task Actual Date", "Priority",
-  "Functionality / Bug", "Item ID", "Board Order", "Assignee Key", "Updated At",
+  "Product", "Item ID", "Board Order", "Assignee Key", "Updated At",
 ];
 check(
   "the old layout under the new map is refused",
@@ -283,6 +297,131 @@ check(
   "A task name cannot start with an = sign.",
 );
 check("a patch without text fields is fine", formula({}, "update"), null);
+
+const w = (
+  f: Parameters<typeof workItemFieldProblem>[0],
+  when: "create" | "update" = "create",
+) => workItemFieldProblem(f, when);
+
+check("word count", wordCount("one two three"), 3);
+const validPeople = {
+  assigneeId: "vismay",
+  secondaryAssigneeId: "tushar",
+  type: "Kaagaz" as const,
+} as const;
+
+check(
+  "create needs end date",
+  w({
+    title: "Ship it",
+    description: "Details",
+    plannedDate: null,
+    ...validPeople,
+  })?.field,
+  "plannedDate",
+);
+check(
+  "create needs description",
+  w({
+    title: "Ship it",
+    description: "  ",
+    plannedDate: "2026-01-01",
+    ...validPeople,
+  })?.field,
+  "description",
+);
+check(
+  "create needs primary person",
+  w({
+    title: "Ship it",
+    description: "Details",
+    plannedDate: "2026-01-01",
+    assigneeId: null,
+    secondaryAssigneeId: "tushar",
+  })?.field,
+  "assigneeId",
+);
+check(
+  "create needs assigned by",
+  w({
+    title: "Ship it",
+    description: "Details",
+    plannedDate: "2026-01-01",
+    assigneeId: "vismay",
+    secondaryAssigneeId: null,
+    type: "Kaagaz",
+  })?.field,
+  "secondaryAssigneeId",
+);
+check(
+  "create needs product",
+  w({
+    title: "Ship it",
+    description: "Details",
+    plannedDate: "2026-01-01",
+    ...validPeople,
+    type: null,
+  })?.field,
+  "type",
+);
+check(
+  "title word limit",
+  w({
+    title: Array(MAX_TITLE_WORDS + 1).fill("word").join(" "),
+    description: "ok",
+    plannedDate: "2026-01-01",
+    ...validPeople,
+  })?.field,
+  "title",
+);
+
+const oldDone: WorkItem = {
+  id: "MON-1",
+  ref: 1,
+  title: "Old",
+  description: "x",
+  assigneeId: "vismay",
+  secondaryAssigneeId: "tushar",
+  status: "Completed",
+  notes: "",
+  createdDate: "2026-01-01",
+  startedDate: null,
+  plannedDate: null,
+  actualDate: "2026-01-01",
+  priority: "Medium",
+  type: "Kaagaz",
+  storyPoints: null,
+  order: 1,
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+check(
+  `completed after ${COMPLETED_ARCHIVE_AFTER_DAYS} days is archived`,
+  isArchivedCompleted(oldDone, "2026-01-16"),
+  true,
+);
+check(
+  `completed within ${COMPLETED_ARCHIVE_AFTER_DAYS} days stays visible`,
+  isArchivedCompleted(oldDone, "2026-01-14"),
+  false,
+);
+
+check(
+  "column sort uses end date",
+  boardSortDay({ ...oldDone, plannedDate: "2026-02-01" }, "in-progress"),
+  "2026-02-01",
+);
+check(
+  "completed column prefers actual date",
+  boardSortDay(oldDone, "completed"),
+  "2026-01-01",
+);
+const a = { ...oldDone, id: "a", plannedDate: "2026-01-05", order: 1 };
+const b = { ...oldDone, id: "b", plannedDate: "2026-01-02", order: 2 };
+check(
+  "ascending date sort",
+  sortColumnByDate([a, b], "yet-to-start", "asc").map((i) => i.id),
+  ["b", "a"],
+);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

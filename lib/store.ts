@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { repository } from "./repositories";
 import { RepositoryError } from "./repository";
-import { todayIso } from "./dates";
+import { boardSortDay, isArchivedCompleted, todayIso } from "./dates";
 import { STARTED_STAGES, TEAM, TERMINAL_STAGES, columnById } from "./constants";
 import type {
   Filters,
@@ -16,6 +16,7 @@ import type {
   SyncState,
   WorkItem,
 } from "./types";
+import { workItemFieldProblem } from "./validation";
 
 export const EMPTY_FILTERS: Filters = {
   query: "",
@@ -23,6 +24,7 @@ export const EMPTY_FILTERS: Filters = {
   priorities: [],
   types: [],
   hideCompleted: false,
+  showArchived: false,
 };
 
 /**
@@ -96,7 +98,7 @@ interface TrackerState {
     id: string,
     columnId: string,
     index: number,
-    assigneeId?: string | null,
+    lane?: Partial<Pick<WorkItem, "assigneeId" | "type">>,
   ) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   resetBoard: () => Promise<void>;
@@ -171,6 +173,23 @@ export const useTracker = create<TrackerState>((set, get) => ({
   },
 
   async createItem(input) {
+    const problem = workItemFieldProblem(
+      {
+        title: input.title,
+        description: input.description,
+        notes: input.notes,
+        plannedDate: input.plannedDate,
+        assigneeId: input.assigneeId,
+        secondaryAssigneeId: input.secondaryAssigneeId,
+        type: input.type,
+      },
+      "create",
+    );
+    if (problem) {
+      set({ sync: "error", error: problem.message });
+      return null;
+    }
+
     const items = get().items;
     const localRef = items.reduce((max, i) => Math.max(max, i.ref), 0) + 1;
     const optimistic: WorkItem = {
@@ -216,6 +235,24 @@ export const useTracker = create<TrackerState>((set, get) => ({
       ...patch,
     };
 
+    const merged = { ...current, ...full };
+    const problem = workItemFieldProblem(
+      {
+        title: merged.title,
+        description: merged.description,
+        notes: merged.notes,
+        plannedDate: merged.plannedDate,
+        assigneeId: merged.assigneeId,
+        secondaryAssigneeId: merged.secondaryAssigneeId,
+        type: merged.type,
+      },
+      "update",
+    );
+    if (problem) {
+      set({ sync: "error", error: problem.message });
+      return;
+    }
+
     set({
       items: previous.map((i) =>
         i.id === id
@@ -240,7 +277,7 @@ export const useTracker = create<TrackerState>((set, get) => ({
     }
   },
 
-  async moveItem(id, columnId, index, assigneeId) {
+  async moveItem(id, columnId, index, lane) {
     const previous = get().items;
     const moving = previous.find((i) => i.id === id);
     if (!moving) return;
@@ -250,8 +287,8 @@ export const useTracker = create<TrackerState>((set, get) => ({
       ...(nextStatus === moving.status
         ? { status: nextStatus }
         : stampDates(moving, nextStatus)),
-      // Dropping into another person's swimlane reassigns the item.
-      ...(assigneeId !== undefined ? { assigneeId } : {}),
+      ...(lane?.assigneeId !== undefined ? { assigneeId: lane.assigneeId } : {}),
+      ...(lane?.type !== undefined ? { type: lane.type } : {}),
     };
 
     // Re-seat the item at `index` within the destination column, then
@@ -357,6 +394,8 @@ export const useTracker = create<TrackerState>((set, get) => ({
 export function applyFilters(items: WorkItem[], f: Filters): WorkItem[] {
   const q = f.query.trim().toLowerCase();
   return items.filter((i) => {
+    // Aged-off Completed work stays in the sheet; search still finds it.
+    if (!f.showArchived && !q && isArchivedCompleted(i)) return false;
     // "Hide done" covers both finished columns, not just Completed.
     if (f.hideCompleted && TERMINAL_STAGES.includes(i.status)) return false;
     if (f.assigneeIds.length) {
@@ -380,10 +419,31 @@ export const isFiltered = (f: Filters): boolean =>
   f.assigneeIds.length > 0 ||
   f.priorities.length > 0 ||
   f.types.length > 0 ||
-  f.hideCompleted;
+  f.hideCompleted ||
+  f.showArchived;
 
 export const byOrder = (a: WorkItem, b: WorkItem): number =>
   a.order - b.order || a.ref - b.ref;
+
+export type ColumnDateSort = "asc" | "desc";
+
+/** Board-only display order; does not write `order` back to the sheet. */
+export function sortColumnByDate(
+  items: WorkItem[],
+  columnId: string,
+  direction: ColumnDateSort,
+): WorkItem[] {
+  return [...items].sort((a, b) => {
+    const ad = boardSortDay(a, columnId);
+    const bd = boardSortDay(b, columnId);
+    if (!ad && !bd) return byOrder(a, b);
+    if (!ad) return 1;
+    if (!bd) return -1;
+    const cmp = ad.localeCompare(bd);
+    if (cmp !== 0) return direction === "asc" ? cmp : -cmp;
+    return byOrder(a, b);
+  });
+}
 
 /**
  * Roster selectors. Components read people from here rather than importing

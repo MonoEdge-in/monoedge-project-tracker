@@ -928,7 +928,7 @@ function Method({ team, notDue }: { team: PersonStats; notDue: number }) {
           counted to today.
         </li>
         <li>
-          Only Primary Person is scored. Secondary person is not held to the
+          Only Primary Person is scored. Assigned by is not held to the
           date.
         </li>
         <li>

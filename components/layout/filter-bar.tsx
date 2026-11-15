@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ChevronDown, Columns3, Rows3, X } from "lucide-react";
+import { Check, ChevronDown, Columns3, Layers, Rows3, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -18,10 +18,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { PRIORITY_TOKENS, TYPE_TOKENS } from "@/lib/constants";
+import { PRIORITY_TOKENS, PRODUCT_TOKENS } from "@/lib/constants";
 import { useMembers } from "@/lib/store";
-import { PRIORITIES, WORK_TYPES } from "@/lib/types";
-import type { Filters, GroupBy, Priority, WorkType } from "@/lib/types";
+import { PRIORITIES, PRODUCTS } from "@/lib/types";
+import type { Filters, GroupBy, Priority, Product } from "@/lib/types";
 import { PersonAvatar } from "@/components/shared/person-avatar";
 import { tone } from "@/components/shared/tone";
 
@@ -95,15 +95,23 @@ export function FilterBar({
   visible: number;
   total: number;
 }) {
-  // Everyone, not just the assignable: work already owned by someone stood
-  // down must still be findable.
   const members = useMembers();
 
+  const filterActive =
+    filters.assigneeIds.length +
+    filters.priorities.length +
+    filters.types.length;
+
+  const displayActive =
+    Number(filters.hideCompleted) +
+    Number(filters.showArchived) +
+    (view === "board" && !showParked ? 1 : 0);
+
   const dirty =
-    filters.assigneeIds.length > 0 ||
-    filters.priorities.length > 0 ||
-    filters.types.length > 0 ||
+    filterActive > 0 ||
     filters.hideCompleted ||
+    filters.showArchived ||
+    (view === "board" && !showParked) ||
     filters.query.trim() !== "";
 
   const people = [
@@ -112,242 +120,342 @@ export function FilterBar({
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule bg-card px-4 py-2 sm:px-6">
-      <Segmented
-        ariaLabel="View"
-        value={view}
-        onChange={onView}
-        options={[
-          { value: "board", label: "Board", icon: <Columns3 className="size-3" /> },
-          { value: "sheet", label: "Sheet", icon: <Rows3 className="size-3" /> },
-        ]}
-      />
+    <div className="border-b border-rule bg-card px-4 py-2 sm:px-6">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+        <Segmented
+          ariaLabel="View"
+          value={view}
+          onChange={onView}
+          options={[
+            { value: "board", label: "Board", icon: <Columns3 className="size-3" /> },
+            { value: "sheet", label: "Sheet", icon: <Rows3 className="size-3" /> },
+          ]}
+        />
 
-      <span aria-hidden className="hidden h-5 w-px bg-rule sm:block" />
+        <span aria-hidden className="hidden h-5 w-px bg-rule sm:block" />
 
-      {/* Person sits first among the menus: who is on it is the question
-          asked most often, and the trigger keeps the selected avatars in
-          view so the answer is readable without opening anything. */}
-      <FilterMenu
-        label="Person"
-        active={filters.assigneeIds.length}
-        badge={<AvatarStack ids={filters.assigneeIds} />}
-        options={people.map((p) => ({
-          value: p.id,
-          label: p.name,
-          leading: (
-            <PersonAvatar
-              memberId={p.id === "unassigned" ? null : p.id}
+        <FilterMenu
+          label="Filters"
+          active={filters.assigneeIds.length + filters.priorities.length}
+          badge={
+            filters.assigneeIds.length + filters.priorities.length > 0 ? (
+              <span className="rounded-full bg-primary px-1.5 text-[9px] leading-4 text-primary-foreground tabular">
+                {filters.assigneeIds.length + filters.priorities.length}
+              </span>
+            ) : null
+          }
+          onClear={() => onFilters({ assigneeIds: [], priorities: [] })}
+          sections={[
+            {
+              title: "Person",
+              options: people.map((p) => ({
+                value: `person:${p.id}`,
+                label: p.name,
+                leading: (
+                  <PersonAvatar
+                    memberId={p.id === "unassigned" ? null : p.id}
+                    size="sm"
+                  />
+                ),
+              })),
+              selected: filters.assigneeIds.map((id) => `person:${id}`),
+              onToggle: (v) => {
+                const id = v.replace(/^person:/, "");
+                onFilters({
+                  assigneeIds: toggle(filters.assigneeIds, id),
+                });
+              },
+              searchable: true,
+            },
+            {
+              title: "Priority",
+              options: PRIORITIES.map((p) => ({
+                value: `priority:${p}`,
+                label: p,
+                color: PRIORITY_TOKENS[p].color,
+              })),
+              selected: filters.priorities.map((p) => `priority:${p}`),
+              onToggle: (v) => {
+                const p = v.replace(/^priority:/, "") as Priority;
+                onFilters({ priorities: toggle(filters.priorities, p) });
+              },
+            },
+          ]}
+        />
+
+        <ProductFilterMenu
+          active={filters.types.length}
+          selected={filters.types}
+          onToggle={(t) => onFilters({ types: toggle(filters.types, t) })}
+          onSet={(types) => onFilters({ types })}
+        />
+
+        <DisplayMenu
+          active={displayActive}
+          view={view}
+          groupBy={groupBy}
+          onGroupBy={onGroupBy}
+          hideCompleted={filters.hideCompleted}
+          showArchived={filters.showArchived}
+          showParked={showParked}
+          onHideCompleted={(v) => onFilters({ hideCompleted: v })}
+          onShowArchived={(v) => onFilters({ showArchived: v })}
+          onShowParked={onShowParked}
+        />
+
+        <div className="ml-auto flex items-center gap-2">
+          <span className="font-mono text-[10.5px] text-muted-foreground tabular">
+            {visible === total ? `${total} items` : `${visible} of ${total}`}
+          </span>
+          {dirty && (
+            <Button
+              variant="ghost"
               size="sm"
-            />
-          ),
-        }))}
-        selected={filters.assigneeIds}
-        onToggle={(v) =>
-          onFilters({ assigneeIds: toggle(filters.assigneeIds, v) })
-        }
-        onSet={(assigneeIds) => onFilters({ assigneeIds })}
-        searchable
-      />
-
-      <FilterMenu
-        label="Priority"
-        active={filters.priorities.length}
-        options={PRIORITIES.map((p) => ({
-          value: p,
-          label: p,
-          color: PRIORITY_TOKENS[p].color,
-        }))}
-        selected={filters.priorities}
-        onToggle={(v) =>
-          onFilters({ priorities: toggle(filters.priorities, v as Priority) })
-        }
-        onSet={(v) => onFilters({ priorities: v as Priority[] })}
-      />
-
-      <FilterMenu
-        label="Type"
-        active={filters.types.length}
-        options={WORK_TYPES.map((t) => ({
-          value: t,
-          label: t,
-          color: TYPE_TOKENS[t].color,
-        }))}
-        selected={filters.types}
-        onToggle={(v) => onFilters({ types: toggle(filters.types, v as WorkType) })}
-        onSet={(v) => onFilters({ types: v as WorkType[] })}
-      />
-
-      {view === "board" && (
-        <>
-          <span aria-hidden className="hidden h-5 w-px bg-rule lg:block" />
-          <Segmented
-            ariaLabel="Group by"
-            value={groupBy}
-            onChange={onGroupBy}
-            options={[
-              { value: "none", label: "Flat" },
-              { value: "assignee", label: "By person" },
-            ]}
-          />
-          <Toggle
-            on={showParked}
-            onClick={() => onShowParked(!showParked)}
-            label="On-hold"
-          />
-        </>
-      )}
-
-      <Toggle
-        on={filters.hideCompleted}
-        onClick={() => onFilters({ hideCompleted: !filters.hideCompleted })}
-        label="Hide done"
-      />
-
-      <div className="ml-auto flex items-center gap-2">
-        <span className="font-mono text-[10.5px] text-muted-foreground tabular">
-          {visible === total ? `${total} items` : `${visible} of ${total}`}
-        </span>
-        {dirty && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClear}
-            className="h-7 gap-1 px-2 font-mono text-[10px] tracking-[0.1em] uppercase text-muted-foreground hover:text-foreground"
-          >
-            <X className="size-3" />
-            Clear
-          </Button>
-        )}
+              onClick={onClear}
+              className="h-7 gap-1 px-2 font-mono text-[10px] tracking-[0.1em] uppercase text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3" />
+              Clear
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function Toggle({
-  on,
-  onClick,
-  label,
+function ProductFilterMenu({
+  active,
+  selected,
+  onToggle,
+  onSet,
 }: {
-  on: boolean;
-  onClick: () => void;
+  active: number;
+  selected: Product[];
+  onToggle: (t: Product) => void;
+  onSet: (types: Product[]) => void;
+}) {
+  return (
+    <FilterMenu
+      label="Product"
+      active={active}
+      sections={[
+        {
+          title: "Product",
+          options: PRODUCTS.map((t) => ({
+            value: t,
+            label: t,
+            color: PRODUCT_TOKENS[t].color,
+          })),
+          selected,
+          onToggle: (v) => onToggle(v as Product),
+        },
+      ]}
+      onClear={() => onSet([])}
+    />
+  );
+}
+
+function DisplayMenu({
+  active,
+  view,
+  groupBy,
+  onGroupBy,
+  hideCompleted,
+  showArchived,
+  showParked,
+  onHideCompleted,
+  onShowArchived,
+  onShowParked,
+}: {
+  active: number;
+  view: View;
+  groupBy: GroupBy;
+  onGroupBy: (g: GroupBy) => void;
+  hideCompleted: boolean;
+  showArchived: boolean;
+  showParked: boolean;
+  onHideCompleted: (v: boolean) => void;
+  onShowArchived: (v: boolean) => void;
+  onShowParked: (v: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const layoutActive = groupBy !== "none";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex h-8 items-center gap-1.5 rounded-md border px-2.5 font-mono text-[10px] font-medium tracking-[0.1em] uppercase transition-colors",
+            "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            active > 0 || layoutActive
+              ? "border-primary/40 bg-brand-tint text-foreground"
+              : "border-rule bg-card text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <SlidersHorizontal className="size-3 opacity-70" />
+          Display
+          {(active > 0 || layoutActive) && (
+            <span className="rounded-full bg-primary px-1.5 text-[9px] leading-4 text-primary-foreground tabular">
+              {active + (layoutActive ? 1 : 0)}
+            </span>
+          )}
+          <ChevronDown className="size-3 opacity-60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-52 p-2">
+        {view === "board" && (
+          <>
+            <p className="label-mono mb-1.5 px-1 text-muted-foreground">
+              Group board
+            </p>
+            <LayoutOption
+              label="Flat"
+              selected={groupBy === "none"}
+              onClick={() => onGroupBy("none")}
+            />
+            <LayoutOption
+              label="By person"
+              selected={groupBy === "assignee"}
+              onClick={() => onGroupBy("assignee")}
+            />
+            <LayoutOption
+              label="By product"
+              selected={groupBy === "product"}
+              onClick={() => onGroupBy("product")}
+            />
+            <div className="my-2 h-px bg-rule" />
+          </>
+        )}
+        <p className="label-mono mb-1.5 px-1 text-muted-foreground">Show</p>
+        <DisplayToggle
+          label="On-hold column"
+          on={view === "board" ? showParked : false}
+          disabled={view !== "board"}
+          onClick={() => onShowParked(!showParked)}
+        />
+        <DisplayToggle
+          label="Archived completed"
+          on={showArchived}
+          onClick={() => onShowArchived(!showArchived)}
+        />
+        <p className="label-mono mt-2 mb-1.5 px-1 text-muted-foreground">Hide</p>
+        <DisplayToggle
+          label="Done work"
+          on={hideCompleted}
+          onClick={() => onHideCompleted(!hideCompleted)}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function LayoutOption({
+  label,
+  selected,
+  onClick,
+}: {
   label: string;
+  selected: boolean;
+  onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      aria-pressed={on}
+      aria-pressed={selected}
       onClick={onClick}
       className={cn(
-        "flex h-8 items-center gap-1.5 rounded-md border px-2.5 font-mono text-[10px] font-medium tracking-[0.1em] uppercase transition-colors",
-        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-        on
-          ? "border-primary/40 bg-brand-tint text-foreground"
-          : "border-rule bg-card text-muted-foreground hover:text-foreground",
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors",
+        "hover:bg-muted/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        selected && "bg-brand-tint/60 font-medium",
       )}
     >
-      {on && <Check className="size-3" />}
+      <span
+        className={cn(
+          "size-2 shrink-0 rounded-full border",
+          selected ? "border-primary bg-primary" : "border-rule bg-card",
+        )}
+      />
       {label}
     </button>
   );
 }
 
-/**
- * Up to three selected avatars, then a count for the rest. Stands in for the
- * plain number badge on the Person menu so a glance at the closed trigger
- * still says *who*, which is what the old avatar strip was good at.
- */
-function AvatarStack({ ids }: { ids: string[] }) {
-  const shown = ids.slice(0, 3);
-  const rest = ids.length - shown.length;
-
+function DisplayToggle({
+  label,
+  on,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
-    <span className="flex items-center">
-      {shown.map((id, i) => (
-        <PersonAvatar
-          key={id}
-          memberId={id === "unassigned" ? null : id}
-          size="sm"
-          // Overlap all but the first, so four chips still fit the 8px gap.
-          className={cn("ring-1 ring-card", i > 0 && "-ml-1.5")}
-        />
-      ))}
-      {rest > 0 && (
-        <span className="ml-1 text-[9px] text-muted-foreground tabular">
-          +{rest}
-        </span>
+    <button
+      type="button"
+      disabled={disabled}
+      aria-pressed={on}
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors",
+        "hover:bg-muted/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        disabled && "pointer-events-none opacity-40",
+        on && "bg-brand-tint/60",
       )}
-    </span>
+    >
+      <span
+        className={cn(
+          "flex size-4 shrink-0 items-center justify-center rounded border",
+          on
+            ? "border-primary bg-primary text-primary-foreground"
+            : "border-rule bg-card",
+        )}
+      >
+        {on && <Check className="size-2.5" />}
+      </span>
+      {label}
+    </button>
   );
 }
 
 function FilterMenu({
   label,
-  options,
-  selected,
-  onToggle,
-  onSet,
-  searchable,
+  sections,
   active,
   badge,
+  onClear,
 }: {
   label: string;
-  options: {
-    value: string;
-    label: string;
-    /** Renders the usual colour dot. Ignored when `leading` is given. */
-    color?: string;
-    /** Replaces the dot, for options that carry their own mark. */
-    leading?: React.ReactNode;
+  sections: {
+    title: string;
+    options: {
+      value: string;
+      label: string;
+      color?: string;
+      leading?: React.ReactNode;
+    }[];
+    selected: string[];
+    onToggle: (v: string) => void;
+    searchable?: boolean;
   }[];
-  selected: string[];
-  onToggle: (v: string) => void;
-  /** Replaces the whole selection at once, for the select-all row. */
-  onSet: (values: string[]) => void;
-  /** A search box. Worth it for people, noise for four priorities. */
-  searchable?: boolean;
   active: number;
-  /** Replaces the count badge when a selection needs richer shorthand. */
   badge?: React.ReactNode;
+  onClear?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
-  // Filtered here rather than by cmdk, so the select-all row knows exactly
-  // which options it is talking about.
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter((o) => o.label.toLowerCase().includes(q));
-  }, [options, query]);
-
-  const allShown =
-    shown.length > 0 && shown.every((o) => selected.includes(o.value));
-
-  const toggleShown = () => {
-    const ids = shown.map((o) => o.value);
-    onSet(
-      allShown
-        ? selected.filter((v) => !ids.includes(v))
-        : [...new Set([...selected, ...ids])],
-    );
-  };
-
-  const bulkLabel = allShown
-    ? query
-      ? "Clear these"
-      : "Clear all"
-    : query
-      ? `Select these ${shown.length}`
-      : "Select all";
+  const anySelected = sections.some((s) => s.selected.length > 0);
 
   return (
     <Popover
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        // A stale query would hide most of the list on reopen, with the
-        // reason scrolled out of sight in a closed box.
         if (!next) setQuery("");
       }}
     >
@@ -357,11 +465,14 @@ function FilterMenu({
           className={cn(
             "flex h-8 items-center gap-1.5 rounded-md border px-2.5 font-mono text-[10px] font-medium tracking-[0.1em] uppercase transition-colors",
             "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            active
+            active > 0
               ? "border-primary/40 bg-brand-tint text-foreground"
               : "border-rule bg-card text-muted-foreground hover:text-foreground",
           )}
         >
+          {label === "Filters" ? (
+            <Layers className="size-3 opacity-70" />
+          ) : null}
           {label}
           {active > 0 &&
             (badge ?? (
@@ -372,53 +483,84 @@ function FilterMenu({
           <ChevronDown className="size-3 opacity-60" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-56 gap-0 p-0">
-        {/* shouldFilter off: `shown` above is the filter, and it is the
-            list the select-all row acts on. */}
+      <PopoverContent align="start" className="w-60 gap-0 p-0">
         <Command shouldFilter={false}>
-          {searchable && (
-            <CommandInput
-              value={query}
-              onValueChange={setQuery}
-              placeholder={`Search ${label.toLowerCase()}`}
-            />
-          )}
-          <CommandList className="p-1">
+          <CommandInput
+            value={query}
+            onValueChange={setQuery}
+            placeholder="Search filters…"
+            className="border-0"
+          />
+          <CommandList className="max-h-72 p-1">
             <CommandEmpty className="px-2 py-3 text-[12.5px] text-muted-foreground">
               No match.
             </CommandEmpty>
+            {sections.map((section, i) => {
+              const q = query.trim().toLowerCase();
+              const shown = q
+                ? section.options.filter(
+                    (o) =>
+                      o.label.toLowerCase().includes(q) ||
+                      section.title.toLowerCase().includes(q),
+                  )
+                : section.options;
+              if (!shown.length) return null;
 
-            {options.length > 1 && shown.length > 0 && (
+              return (
+                <div key={section.title}>
+                  {i > 0 && <CommandSeparator className="my-1" />}
+                  <CommandGroup
+                    heading={
+                      <span className="label-mono text-[10px] text-muted-foreground">
+                        {section.title}
+                      </span>
+                    }
+                  >
+                    {shown.map((o) => (
+                      <CommandItem
+                        key={o.value}
+                        value={o.value}
+                        onSelect={() => section.onToggle(o.value)}
+                        data-checked={section.selected.includes(o.value)}
+                        className="text-[13px]"
+                      >
+                        <span className="flex items-center gap-2">
+                          {section.selected.includes(o.value) ? (
+                            <Check className="size-3.5 text-primary" />
+                          ) : (
+                            <span className="size-3.5" />
+                          )}
+                          {o.leading ??
+                            (o.color ? (
+                              <i className="dot" style={tone(o.color)} />
+                            ) : null)}
+                          {o.label}
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </div>
+              );
+            })}
+            {anySelected && (
               <>
+                <CommandSeparator className="my-1" />
                 <CommandGroup>
                   <CommandItem
-                    onSelect={toggleShown}
+                    onSelect={() => {
+                      if (onClear) onClear();
+                      else
+                        sections.forEach((s) => {
+                          s.selected.forEach((v) => s.onToggle(v));
+                        });
+                    }}
                     className="text-[12.5px] text-muted-foreground"
                   >
-                    {bulkLabel}
+                    Clear {label.toLowerCase()}
                   </CommandItem>
                 </CommandGroup>
-                <CommandSeparator />
               </>
             )}
-
-            <CommandGroup>
-              {shown.map((o) => (
-                <CommandItem
-                  key={o.value}
-                  value={o.value}
-                  onSelect={() => onToggle(o.value)}
-                  data-checked={selected.includes(o.value)}
-                  className="text-[13px]"
-                >
-                  <span className="flex items-center gap-2">
-                    {o.leading ??
-                      (o.color ? <i className="dot" style={tone(o.color)} /> : null)}
-                    {o.label}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
           </CommandList>
         </Command>
       </PopoverContent>

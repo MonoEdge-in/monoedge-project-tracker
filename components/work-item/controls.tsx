@@ -14,11 +14,11 @@ import {
   ALL_COLUMNS,
   PRIORITY_TOKENS,
   STATUS_TOKENS,
-  TYPE_TOKENS,
+  PRODUCT_TOKENS,
 } from "@/lib/constants";
 import { useActiveMembers } from "@/lib/store";
-import { PRIORITIES, WORK_TYPES } from "@/lib/types";
-import type { Priority, Status, WorkType } from "@/lib/types";
+import { PRIORITIES, PRODUCTS } from "@/lib/types";
+import type { Priority, Product, Status } from "@/lib/types";
 import { PersonAvatar } from "@/components/shared/person-avatar";
 import { tone } from "@/components/shared/tone";
 
@@ -135,26 +135,30 @@ export function PrioritySelect({
 export function TypeSelect({
   value,
   onChange,
+  allowEmpty = true,
 }: {
-  value: WorkType | null;
-  onChange: (v: WorkType | null) => void;
+  value: Product | null;
+  onChange: (v: Product | null) => void;
+  allowEmpty?: boolean;
 }) {
   return (
     <Select
-      value={value ?? NO_TYPE}
-      onValueChange={(v) => onChange(v === NO_TYPE ? null : (v as WorkType))}
+      value={value ?? (allowEmpty ? NO_TYPE : undefined)}
+      onValueChange={(v) => onChange(v === NO_TYPE ? null : (v as Product))}
     >
-      <SelectTrigger className={triggerClass} aria-label="Functionality or bug">
-        <SelectValue />
+      <SelectTrigger className={triggerClass} aria-label="Product">
+        <SelectValue placeholder={allowEmpty ? undefined : "Choose a product"} />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={NO_TYPE} className="text-[13px] text-muted-foreground">
-          Not categorised
-        </SelectItem>
-        {WORK_TYPES.map((t) => (
+        {allowEmpty ? (
+          <SelectItem value={NO_TYPE} className="text-[13px] text-muted-foreground">
+            No product
+          </SelectItem>
+        ) : null}
+        {PRODUCTS.map((t) => (
           <SelectItem key={t} value={t} className="text-[13px]">
             <span className="flex items-center gap-2">
-              <i className="dot" style={tone(TYPE_TOKENS[t].color)} />
+              <i className="dot" style={tone(PRODUCT_TOKENS[t].color)} />
               {t}
             </span>
           </SelectItem>
@@ -168,35 +172,38 @@ export function AssigneeSelect({
   value,
   onChange,
   label = "Primary person",
-  /** "Unassigned" is right for an owner and wrong for a helper — nobody
-   *  helping is a normal state, not an unfilled one. */
   placeholder = "Unassigned",
+  allowEmpty = true,
 }: {
   value: string | null;
   onChange: (v: string | null) => void;
   label?: string;
   placeholder?: string;
+  /** When false, a person must be chosen. */
+  allowEmpty?: boolean;
 }) {
   const members = useActiveMembers();
 
   return (
     <Select
-      value={value ?? UNASSIGNED}
+      value={value ?? (allowEmpty ? UNASSIGNED : undefined)}
       onValueChange={(v) => onChange(v === UNASSIGNED ? null : v)}
     >
       <SelectTrigger className={triggerClass} aria-label={label}>
-        <SelectValue />
+        <SelectValue placeholder={allowEmpty ? placeholder : "Choose someone"} />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem
-          value={UNASSIGNED}
-          className="text-[13px] text-muted-foreground"
-        >
-          <span className="flex items-center gap-2">
-            <PersonAvatar memberId={null} size="sm" />
-            {placeholder}
-          </span>
-        </SelectItem>
+        {allowEmpty ? (
+          <SelectItem
+            value={UNASSIGNED}
+            className="text-[13px] text-muted-foreground"
+          >
+            <span className="flex items-center gap-2">
+              <PersonAvatar memberId={null} size="sm" />
+              {placeholder}
+            </span>
+          </SelectItem>
+        ) : null}
         {members.map((m) => (
           <SelectItem key={m.id} value={m.id} className="text-[13px]">
             <span className="flex items-center gap-2">
@@ -215,11 +222,13 @@ export function DateField({
   onChange,
   label,
   readOnlyHint,
+  ariaInvalid,
 }: {
   value: string | null;
   onChange: (v: string | null) => void;
   label: string;
   readOnlyHint?: string;
+  ariaInvalid?: boolean;
 }) {
   return (
     <Field label={label} hint={readOnlyHint}>
@@ -228,6 +237,7 @@ export function DateField({
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
         aria-label={label}
+        aria-invalid={ariaInvalid}
         className={cn(
           "h-9 w-full rounded-md border border-input bg-card px-2.5 font-mono text-[12.5px] tabular",
           "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none",

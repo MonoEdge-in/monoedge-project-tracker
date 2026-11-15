@@ -13,7 +13,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { COLUMNS, type BoardColumnDef } from "@/lib/constants";
 import { repository } from "@/lib/repositories";
-import { applyFilters, statusForDrop, useTracker } from "@/lib/store";
+import {
+  applyFilters,
+  type ColumnDateSort,
+  statusForDrop,
+  useTracker,
+} from "@/lib/store";
 import type { Status } from "@/lib/types";
 
 export default function TrackerPage() {
@@ -45,6 +50,20 @@ export default function TrackerPage() {
 
   const [view, setView] = useState<View>("board");
   const [showParked, setShowParked] = useState(true);
+  const [columnDateSort, setColumnDateSort] = useState<
+    Partial<Record<string, ColumnDateSort>>
+  >({});
+
+  const toggleColumnDateSort = (columnId: string) => {
+    setColumnDateSort((prev) => {
+      const cur = prev[columnId];
+      if (!cur) return { ...prev, [columnId]: "asc" };
+      if (cur === "asc") return { ...prev, [columnId]: "desc" };
+      const next = { ...prev };
+      delete next[columnId];
+      return next;
+    });
+  };
   const [composerDefaults, setComposerDefaults] = useState<{
     status: Status;
     assigneeId: string | null;
@@ -158,9 +177,9 @@ export default function TrackerPage() {
               onOpen={select}
               onAdd={openComposer}
               onStatus={(id, status) => void patchItem(id, { status })}
-              onMove={(id, columnId, index, assigneeId) => {
+              onMove={(id, columnId, index, lane) => {
                 const item = items.find((i) => i.id === id);
-                void moveItem(id, columnId, index, assigneeId);
+                void moveItem(id, columnId, index, lane);
                 if (!item) return;
 
                 const next = statusForDrop(item, columnId);
@@ -175,6 +194,8 @@ export default function TrackerPage() {
                         : undefined,
                 });
               }}
+              columnDateSort={columnDateSort}
+              onToggleColumnDateSort={toggleColumnDateSort}
             />
           </div>
         ) : (

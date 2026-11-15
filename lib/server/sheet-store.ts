@@ -13,7 +13,7 @@ import {
   str,
 } from "@/lib/sheet-mapping";
 import type { Member, WorkItem } from "@/lib/types";
-import { formulaProblem } from "@/lib/validation";
+import { workItemFieldProblem } from "@/lib/validation";
 import { loadTeam } from "./team-store";
 import {
   deleteRow,
@@ -184,18 +184,26 @@ async function nextFreeRow(c: Ctx): Promise<number> {
   return FIRST_DATA_ROW + (gap === -1 ? rows.length : gap);
 }
 
-/** Refuses free text the tracking tab would run as a formula. Checked here,
- *  at the write, so no caller can skip it. */
-function assertNoFormula(
-  fields: Partial<WorkItem>,
+/** Checked at the write so no caller can skip it. */
+function assertValidWorkItem(
+  item: Pick<
+    WorkItem,
+    | "title"
+    | "description"
+    | "notes"
+    | "plannedDate"
+    | "assigneeId"
+    | "secondaryAssigneeId"
+    | "type"
+  >,
   when: "create" | "update",
 ): void {
-  const problem = formulaProblem(fields, when);
+  const problem = workItemFieldProblem(item, when);
   if (problem) throw new SheetError(problem.message, 400);
 }
 
 export async function createItem(item: WorkItem): Promise<WorkItem> {
-  assertNoFormula(item, "create");
+  assertValidWorkItem(item, "create");
   const c = await ctx();
   await ensureHeaders(c);
 
@@ -250,7 +258,6 @@ export async function updateItem(
    */
   guard?: (current: WorkItem) => void,
 ): Promise<WorkItem> {
-  assertNoFormula(patch, "update");
   const c = await ctx();
   const rowNumber = await findRow(c, id);
   const row =
@@ -262,6 +269,20 @@ export async function updateItem(
   if (!current) throw new SheetError(`${id} row is empty.`, 409);
 
   guard?.(current);
+
+  const merged = { ...current, ...patch };
+  assertValidWorkItem(
+    {
+      title: merged.title,
+      description: merged.description,
+      notes: merged.notes,
+      plannedDate: merged.plannedDate,
+      assigneeId: merged.assigneeId,
+      secondaryAssigneeId: merged.secondaryAssigneeId,
+      type: merged.type,
+    },
+    "update",
+  );
 
   const epoch = new Date(0).toISOString();
   if (

@@ -22,7 +22,7 @@ const HEADS: { key: SortKey | null; label: string; className?: string }[] = [
   { key: "title", label: "Tasks", className: "min-w-[280px]" },
   { key: null, label: "Description", className: "min-w-[200px]" },
   { key: "person", label: "Primary Person", className: "w-[172px]" },
-  { key: null, label: "Secondary Person", className: "w-[172px]" },
+  { key: null, label: "Assigned by", className: "w-[172px]" },
   { key: "status", label: "Status", className: "w-[168px]" },
   { key: null, label: "Notes", className: "min-w-[180px]" },
   { key: null, label: "Created", className: "w-[92px]" },
@@ -30,7 +30,7 @@ const HEADS: { key: SortKey | null; label: string; className?: string }[] = [
   { key: "planned", label: "Planned", className: "w-[100px]" },
   { key: null, label: "Actual", className: "w-[92px]" },
   { key: "priority", label: "Priority", className: "w-[116px]" },
-  { key: null, label: "Functionality / Bug", className: "w-[148px]" },
+  { key: null, label: "Product", className: "w-[148px]" },
   { key: "points", label: "Points", className: "w-[84px]" },
 ];
 

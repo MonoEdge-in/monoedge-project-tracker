@@ -1,5 +1,5 @@
 import type { IsoDate, WorkItem } from "./types";
-import { TERMINAL_STAGES } from "./constants";
+import { COMPLETED_ARCHIVE_AFTER_DAYS, TERMINAL_STAGES } from "./constants";
 
 export const todayIso = (): IsoDate => {
   const d = new Date();
@@ -38,6 +38,37 @@ export const daysFromToday = (iso: IsoDate | null): number | null => {
   return Math.round(ms / 86_400_000);
 };
 
+/** Whole days from `from` to `to` (negative if `to` is earlier). */
+export const daysBetween = (from: IsoDate, to: IsoDate): number => {
+  const ms = parse(to).getTime() - parse(from).getTime();
+  return Math.round(ms / 86_400_000);
+};
+
+const asDay = (iso: IsoDate | string): IsoDate | null => {
+  const day = iso.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+};
+
+/** When a Completed row finished, for ageing it off the board. */
+export const completionDay = (item: WorkItem): IsoDate | null => {
+  if (item.status !== "Completed") return null;
+  return item.actualDate ?? asDay(item.updatedAt);
+};
+
+/**
+ * Completed work that finished more than {@link COMPLETED_ARCHIVE_AFTER_DAYS}
+ * ago. Stays in the sheet and in analytics; hidden from the board unless the
+ * person turns on Show archived or searches by name.
+ */
+export const isArchivedCompleted = (
+  item: WorkItem,
+  asOf: IsoDate = todayIso(),
+): boolean => {
+  const done = completionDay(item);
+  if (!done) return false;
+  return daysBetween(done, asOf) > COMPLETED_ARCHIVE_AFTER_DAYS;
+};
+
 /**
  * Past its planned date and still owed. Finished work is not late, and
  * neither is parked work — On-hold means the slip was a decision, so
@@ -72,6 +103,19 @@ export const ageInDays = (item: WorkItem): number | null => {
   const anchor = item.startedDate ?? item.createdDate;
   const days = daysFromToday(anchor);
   return days === null ? null : Math.abs(days);
+};
+
+/** Date used when sorting cards in a board column. */
+export const boardSortDay = (
+  item: WorkItem,
+  columnId: string,
+): IsoDate | null => {
+  if (columnId === "completed") {
+    return (
+      item.actualDate ?? item.plannedDate ?? item.createdDate ?? null
+    );
+  }
+  return item.plannedDate ?? item.createdDate ?? null;
 };
 
 export const relativeTime = (isoDateTime: string): string => {

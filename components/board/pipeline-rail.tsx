@@ -18,17 +18,19 @@ import type { Status, WorkItem } from "@/lib/types";
 
 /**
  * The board's one loud element, and the place the collapsed detail still
- * lives: four columns hide whether work is in review, ready to merge or
- * waiting on a deploy, so the rail breaks all seven stages out by volume.
- * A stage that is backing up gets visibly fatter. Clicking a segment jumps
- * the board to the column that holds it.
+ * lives: three columns hide whether work is in review or QA, so the rail
+ * breaks the main flow stages out by volume. A stage that is backing up gets
+ * visibly fatter. Clicking a segment jumps the board to the column that
+ * holds it.
  */
 export function PipelineRail({ items }: { items: WorkItem[] }) {
   const { segments, total, inFlight, late } = useMemo(() => {
     const counts = new Map<Status, number>();
     FLOW.forEach((s) => counts.set(s, 0));
     items.forEach((i) => {
-      if (counts.has(i.status)) counts.set(i.status, counts.get(i.status)! + 1);
+      // In Testing has no column of its own — roll it into In Progress here.
+      const status = i.status === "In Testing" ? "In Progress" : i.status;
+      if (counts.has(status)) counts.set(status, counts.get(status)! + 1);
     });
 
     const totalCount = FLOW.reduce((n, s) => n + (counts.get(s) ?? 0), 0);

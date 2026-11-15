@@ -22,14 +22,44 @@ import {
   columnForStatus,
   type BoardColumnDef,
 } from "@/lib/constants";
-import { byOrder, useMembers } from "@/lib/store";
-import type { GroupBy, Status, WorkItem } from "@/lib/types";
+import {
+  byOrder,
+  type ColumnDateSort,
+  sortColumnByDate,
+  useMembers,
+} from "@/lib/store";
+import { PRODUCT_TOKENS } from "@/lib/constants";
+import type { GroupBy, Product, Status, WorkItem } from "@/lib/types";
+import { PRODUCTS } from "@/lib/types";
+import { tone } from "@/components/shared/tone";
 import { PersonAvatar } from "@/components/shared/person-avatar";
 import { BoardColumn } from "./board-column";
 import { WorkItemCard } from "./work-item-card";
 
 const ALL_LANE = "all";
 const UNASSIGNED = "unassigned";
+const NO_PRODUCT = "__no_product__";
+
+function laneForItem(item: WorkItem, groupBy: GroupBy): string {
+  if (groupBy === "assignee") return item.assigneeId ?? UNASSIGNED;
+  if (groupBy === "product") return item.type ?? NO_PRODUCT;
+  return ALL_LANE;
+}
+
+function lanePatch(
+  groupBy: GroupBy,
+  lane: string,
+): Partial<Pick<WorkItem, "assigneeId" | "type">> | undefined {
+  if (groupBy === "assignee") {
+    return { assigneeId: lane === UNASSIGNED ? null : lane };
+  }
+  if (groupBy === "product") {
+    return {
+      type: lane === NO_PRODUCT ? null : (lane as Product),
+    };
+  }
+  return undefined;
+}
 
 /** Droppable keys are `columnId__lane`; work item ids never contain "__". */
 const dropKey = (columnId: string, lane: string) => `${columnId}__${lane}`;
@@ -45,16 +75,23 @@ function buildColumns(
   items: WorkItem[],
   lanes: string[],
   groupBy: GroupBy,
+  columnDateSort: Partial<Record<string, ColumnDateSort>>,
 ): Columns {
   const cols: Columns = {};
   ALL_COLUMNS.forEach((c) => lanes.forEach((l) => (cols[dropKey(c.id, l)] = [])));
 
   [...items].sort(byOrder).forEach((item) => {
-    const lane =
-      groupBy === "assignee" ? (item.assigneeId ?? UNASSIGNED) : ALL_LANE;
+    const lane = laneForItem(item, groupBy);
     const k = dropKey(columnForStatus(item.status).id, lane);
     if (cols[k]) cols[k].push(item);
   });
+
+  for (const key of Object.keys(cols)) {
+    const columnId = key.split("__")[0] ?? "";
+    const dir = columnDateSort[columnId];
+    if (dir) cols[key] = sortColumnByDate(cols[key], columnId, dir);
+  }
+
   return cols;
 }
 
@@ -66,6 +103,8 @@ export function KanbanBoard({
   onAdd,
   onStatus,
   onMove,
+  columnDateSort,
+  onToggleColumnDateSort,
 }: {
   items: WorkItem[];
   groupBy: GroupBy;
@@ -77,21 +116,27 @@ export function KanbanBoard({
     id: string,
     columnId: string,
     index: number,
-    assigneeId?: string | null,
+    lane?: Partial<Pick<WorkItem, "assigneeId" | "type">>,
   ) => void;
+  columnDateSort: Partial<Record<string, ColumnDateSort>>;
+  onToggleColumnDateSort: (columnId: string) => void;
 }) {
   const members = useMembers();
-  const lanes = useMemo(
-    () =>
-      groupBy === "assignee"
-        ? [...members.map((m) => m.id), UNASSIGNED]
-        : [ALL_LANE],
-    [groupBy, members],
-  );
+  const lanes = useMemo(() => {
+    if (groupBy === "assignee") {
+      return [...members.map((m) => m.id), UNASSIGNED];
+    }
+    if (groupBy === "product") {
+      const list: string[] = [...PRODUCTS];
+      if (items.some((i) => !i.type)) list.push(NO_PRODUCT);
+      return list;
+    }
+    return [ALL_LANE];
+  }, [groupBy, members, items]);
 
   const base = useMemo(
-    () => buildColumns(items, lanes, groupBy),
-    [items, lanes, groupBy],
+    () => buildColumns(items, lanes, groupBy, columnDateSort),
+    [items, lanes, groupBy, columnDateSort],
   );
 
   const [preview, setPreview] = useState<Columns | null>(null);
@@ -140,14 +185,10 @@ export function KanbanBoard({
     const insertAt =
       isColumnKey(over.id) || overIndex === -1 ? toList.length : overIndex;
 
+    const crossLane = lanePatch(groupBy, toLane);
     toList.splice(insertAt, 0, {
       ...moved,
-      assigneeId:
-        groupBy === "assignee"
-          ? toLane === UNASSIGNED
-            ? null
-            : toLane
-          : moved.assigneeId,
+      ...crossLane,
     });
 
     next[from] = fromList;
@@ -177,16 +218,7 @@ export function KanbanBoard({
 
         const index = list.findIndex((i) => i.id === a.id);
         const { columnId, lane } = parseKey(to);
-        onMove(
-          String(a.id),
-          columnId,
-          Math.max(0, index),
-          groupBy === "assignee"
-            ? lane === UNASSIGNED
-              ? null
-              : lane
-            : undefined,
-        );
+        onMove(String(a.id), columnId, Math.max(0, index), lanePatch(groupBy, lane));
       }
     }
 
@@ -226,6 +258,8 @@ export function KanbanBoard({
                 onAdd={(c) => onAdd(c)}
                 onStatus={onStatus}
                 isDropTarget={overKey === dropKey(column.id, ALL_LANE)}
+                dateSort={columnDateSort[column.id] ?? null}
+                onToggleDateSort={() => onToggleColumnDateSort(column.id)}
               />
             ))}
           </div>
@@ -233,9 +267,17 @@ export function KanbanBoard({
           <div className="board-scroll flex h-full min-w-max flex-col gap-6 overflow-y-auto p-4 sm:px-6">
             {lanes.map((lane) => {
               const member =
-                lane === UNASSIGNED
-                  ? undefined
-                  : members.find((m) => m.id === lane);
+                groupBy === "assignee" && lane !== UNASSIGNED
+                  ? members.find((m) => m.id === lane)
+                  : undefined;
+              const product =
+                groupBy === "product" && lane !== NO_PRODUCT
+                  ? (lane as Product)
+                  : null;
+              const laneLabel =
+                groupBy === "product"
+                  ? product ?? "No product"
+                  : (member?.name ?? "Unassigned");
               const count = columns.reduce(
                 (n, c) => n + (cols[dropKey(c.id, lane)]?.length ?? 0),
                 0,
@@ -243,13 +285,20 @@ export function KanbanBoard({
               return (
                 <div key={lane}>
                   <div className="sticky left-0 mb-2 flex w-fit items-center gap-2">
-                    <PersonAvatar
-                      memberId={lane === UNASSIGNED ? null : lane}
-                      size="md"
-                    />
-                    <span className="text-[13px] font-semibold">
-                      {member?.name ?? "Unassigned"}
-                    </span>
+                    {groupBy === "assignee" ? (
+                      <PersonAvatar
+                        memberId={lane === UNASSIGNED ? null : lane}
+                        size="md"
+                      />
+                    ) : product ? (
+                      <i
+                        className="dot"
+                        style={tone(PRODUCT_TOKENS[product].color)}
+                      />
+                    ) : (
+                      <span className="size-2 rounded-full bg-muted-foreground/40" />
+                    )}
+                    <span className="text-[13px] font-semibold">{laneLabel}</span>
                     <span className="font-mono text-[11px] text-muted-foreground tabular">
                       {count}
                     </span>
@@ -263,10 +312,17 @@ export function KanbanBoard({
                         items={cols[dropKey(column.id, lane)] ?? []}
                         onOpen={onOpen}
                         onAdd={(c) =>
-                          onAdd(c, lane === UNASSIGNED ? null : lane)
+                          onAdd(
+                            c,
+                            groupBy === "assignee" && lane !== UNASSIGNED
+                              ? lane
+                              : undefined,
+                          )
                         }
                         onStatus={onStatus}
                         isDropTarget={overKey === dropKey(column.id, lane)}
+                        dateSort={columnDateSort[column.id] ?? null}
+                        onToggleDateSort={() => onToggleColumnDateSort(column.id)}
                         dense
                       />
                     ))}
