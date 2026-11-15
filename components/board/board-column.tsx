@@ -2,6 +2,7 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { motion } from "motion/react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export function BoardColumn({
   isDropTarget,
   dateSort,
   onToggleDateSort,
+  enterIndex = 0,
   /** Swimlane mode: empty columns collapse instead of holding a full height. */
   dense = false,
 }: {
@@ -38,6 +40,7 @@ export function BoardColumn({
   isDropTarget: boolean;
   dateSort: ColumnDateSort | null;
   onToggleDateSort: () => void;
+  enterIndex?: number;
   dense?: boolean;
 }) {
   const { setNodeRef } = useDroppable({
@@ -58,8 +61,15 @@ export function BoardColumn({
           : "Sort by end date";
 
   return (
-    <section
+    <motion.section
       data-column={column.id}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.48,
+        delay: enterIndex * 0.055,
+        ease: [0.22, 1, 0.36, 1],
+      }}
       className={cn(
         "flex flex-col",
         dense
@@ -203,6 +213,6 @@ export function BoardColumn({
             </div>
           ))}
       </div>
-    </section>
+    </motion.section>
   );
 }

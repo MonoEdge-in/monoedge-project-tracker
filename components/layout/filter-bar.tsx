@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { motion } from "motion/react";
 import { Check, ChevronDown, Columns3, Layers, Rows3, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -120,7 +121,12 @@ export function FilterBar({
   ];
 
   return (
-    <div className="border-b border-rule bg-card px-4 py-2 sm:px-6">
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+      className="border-b border-rule bg-card px-4 py-2 sm:px-6"
+    >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
         <Segmented
           ariaLabel="View"
@@ -220,7 +226,7 @@ export function FilterBar({
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

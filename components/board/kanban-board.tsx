@@ -245,12 +245,13 @@ export function KanbanBoard({
           transform on any ancestor makes that fixed element resolve against
           the ancestor instead of the viewport, so the dragged card lands
           offset from the cursor by the height of the chrome above the board. */}
-      <div className="board-scroll animate-rise h-full overflow-x-auto overflow-y-hidden">
+      <div className="board-scroll h-full overflow-x-auto overflow-y-hidden">
         {groupBy === "none" ? (
           <div className="flex h-full gap-3 p-4 sm:px-6">
-            {columns.map((column) => (
+            {columns.map((column, index) => (
               <BoardColumn
                 key={column.id}
+                enterIndex={index}
                 column={column}
                 dropId={dropKey(column.id, ALL_LANE)}
                 items={cols[dropKey(column.id, ALL_LANE)] ?? []}
@@ -304,9 +305,10 @@ export function KanbanBoard({
                     </span>
                   </div>
                   <div className="flex items-start gap-3">
-                    {columns.map((column) => (
+                    {columns.map((column, index) => (
                       <BoardColumn
                         key={column.id}
+                        enterIndex={index}
                         column={column}
                         dropId={dropKey(column.id, lane)}
                         items={cols[dropKey(column.id, lane)] ?? []}
