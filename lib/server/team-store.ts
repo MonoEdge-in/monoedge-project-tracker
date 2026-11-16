@@ -3,7 +3,7 @@ import "server-only";
 import { TEAM } from "@/lib/constants";
 import { str } from "@/lib/sheet-mapping";
 import type { Member, Role } from "@/lib/types";
-import { getTab, readConfig, readRanges, writeRanges, SheetError } from "./sheets";
+import { getTab, readConfig, readRanges, writeRanges } from "./sheets";
 
 /**
  * The roster, kept in a `Team` tab in the same spreadsheet as the work.
@@ -171,13 +171,7 @@ async function ctx() {
   const config = readConfig();
   // getTab resolves by name and throws a 404 listing the tabs it did find,
   // which is exactly the message someone who forgot to add the tab needs.
-  const meta = await getTab({ ...config, tabName: TEAM_TAB }).catch(() => {
-    throw new SheetError(
-      `The spreadsheet has no "${TEAM_TAB}" tab.`,
-      500,
-      `Add a tab named ${TEAM_TAB} with these headers in row 1: ${HEADERS.join(", ")}`,
-    );
-  });
+  const meta = await getTab({ ...config, tabName: TEAM_TAB });
   return { config, tab: meta.title };
 }
 
