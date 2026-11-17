@@ -11,12 +11,13 @@ import {
 import {
   MAX_TITLE_WORDS,
   formulaProblem,
+  problemForPatch,
   workItemFieldProblem,
   wordCount,
 } from "../lib/validation";
 import { COMPLETED_ARCHIVE_AFTER_DAYS } from "../lib/constants";
 import { boardSortDay, isArchivedCompleted } from "../lib/dates";
-import { sortColumnByDate } from "../lib/store";
+import { applyFilters, EMPTY_FILTERS, sortColumnByDate } from "../lib/store";
 import type { WorkItem } from "../lib/types";
 import type { Member } from "../lib/types";
 
@@ -105,6 +106,8 @@ check("unassigned", real?.assigneeId, null);
 
 check("product from sheet", parseProduct("Soch"), "Soch");
 check("product case insensitive", parseProduct("  business brain "), "Business Brain");
+check("internal product", parseProduct("internal"), "Internal");
+check("computer vision product", parseProduct("computer vision"), "Computer Vision");
 check("legacy functionality not a product", parseProduct("Product Functionality"), null);
 check("row number retained", real?.sheetRow, 2);
 
@@ -365,6 +368,26 @@ check(
   "type",
 );
 check(
+  "a date change ignores a blank assigned by",
+  problemForPatch({ plannedDate: "2026-11-20" }),
+  null,
+);
+check(
+  "setting assigned by does not require the other fields",
+  problemForPatch({ secondaryAssigneeId: "krishna" }),
+  null,
+);
+check(
+  "clearing assigned by is still refused",
+  problemForPatch({ secondaryAssigneeId: null })?.field,
+  "secondaryAssigneeId",
+);
+check(
+  "clearing the end date is still refused",
+  problemForPatch({ plannedDate: null })?.field,
+  "plannedDate",
+);
+check(
   "title word limit",
   w({
     title: Array(MAX_TITLE_WORDS + 1).fill("word").join(" "),
@@ -414,6 +437,35 @@ check(
   "completed column prefers actual date",
   boardSortDay(oldDone, "completed"),
   "2026-01-01",
+);
+const handedOff: WorkItem = {
+  ...oldDone,
+  id: "MON-9",
+  status: "Yet to Start",
+  assigneeId: "vismay",
+  secondaryAssigneeId: "tushar",
+  actualDate: null,
+};
+check(
+  "filtering by the primary person keeps the task",
+  applyFilters([handedOff], { ...EMPTY_FILTERS, assigneeIds: ["vismay"] }).map(
+    (i) => i.id,
+  ),
+  ["MON-9"],
+);
+check(
+  "filtering by assigned by keeps the task",
+  applyFilters([handedOff], { ...EMPTY_FILTERS, assigneeIds: ["tushar"] }).map(
+    (i) => i.id,
+  ),
+  ["MON-9"],
+);
+check(
+  "filtering by someone else drops the task",
+  applyFilters([handedOff], { ...EMPTY_FILTERS, assigneeIds: ["krishna"] }).map(
+    (i) => i.id,
+  ),
+  [],
 );
 const a = { ...oldDone, id: "a", plannedDate: "2026-01-05", order: 1 };
 const b = { ...oldDone, id: "b", plannedDate: "2026-01-02", order: 2 };

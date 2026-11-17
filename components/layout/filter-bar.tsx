@@ -19,7 +19,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { PRIORITY_TOKENS, PRODUCT_TOKENS } from "@/lib/constants";
+import { PRIORITY_TOKENS, PRODUCT_TOKENS, COLUMNS } from "@/lib/constants";
 import { useMembers } from "@/lib/store";
 import { PRIORITIES, PRODUCTS } from "@/lib/types";
 import type { Filters, GroupBy, Priority, Product } from "@/lib/types";
@@ -104,12 +104,13 @@ export function FilterBar({
     filters.types.length;
 
   const displayActive =
-    Number(filters.hideCompleted) +
+    filters.hiddenColumns.length +
     Number(filters.showArchived) +
     (view === "board" && !showParked ? 1 : 0);
 
   const dirty =
     filterActive > 0 ||
+    filters.hiddenColumns.length > 0 ||
     filters.hideCompleted ||
     filters.showArchived ||
     (view === "board" && !showParked) ||
@@ -201,10 +202,15 @@ export function FilterBar({
           view={view}
           groupBy={groupBy}
           onGroupBy={onGroupBy}
-          hideCompleted={filters.hideCompleted}
+          hiddenColumns={filters.hiddenColumns}
           showArchived={filters.showArchived}
           showParked={showParked}
-          onHideCompleted={(v) => onFilters({ hideCompleted: v })}
+          onHiddenColumns={(hiddenColumns) =>
+            onFilters({
+              hiddenColumns,
+              hideCompleted: hiddenColumns.includes("completed"),
+            })
+          }
           onShowArchived={(v) => onFilters({ showArchived: v })}
           onShowParked={onShowParked}
         />
@@ -267,10 +273,10 @@ function DisplayMenu({
   view,
   groupBy,
   onGroupBy,
-  hideCompleted,
+  hiddenColumns,
   showArchived,
   showParked,
-  onHideCompleted,
+  onHiddenColumns,
   onShowArchived,
   onShowParked,
 }: {
@@ -278,10 +284,10 @@ function DisplayMenu({
   view: View;
   groupBy: GroupBy;
   onGroupBy: (g: GroupBy) => void;
-  hideCompleted: boolean;
+  hiddenColumns: string[];
   showArchived: boolean;
   showParked: boolean;
-  onHideCompleted: (v: boolean) => void;
+  onHiddenColumns: (ids: string[]) => void;
   onShowArchived: (v: boolean) => void;
   onShowParked: (v: boolean) => void;
 }) {
@@ -335,7 +341,25 @@ function DisplayMenu({
             <div className="my-2 h-px bg-rule" />
           </>
         )}
-        <p className="label-mono mb-1.5 px-1 text-muted-foreground">Show</p>
+        <p className="label-mono mb-1.5 px-1 text-muted-foreground">Columns</p>
+        {COLUMNS.map((column) => {
+          const shown = !hiddenColumns.includes(column.id);
+          return (
+            <DisplayToggle
+              key={column.id}
+              label={column.label}
+              on={shown}
+              onClick={() =>
+                onHiddenColumns(
+                  shown
+                    ? [...hiddenColumns, column.id]
+                    : hiddenColumns.filter((id) => id !== column.id),
+                )
+              }
+            />
+          );
+        })}
+        <p className="label-mono mt-2 mb-1.5 px-1 text-muted-foreground">Show</p>
         <DisplayToggle
           label="On-hold column"
           on={view === "board" ? showParked : false}
@@ -346,12 +370,6 @@ function DisplayMenu({
           label="Archived completed"
           on={showArchived}
           onClick={() => onShowArchived(!showArchived)}
-        />
-        <p className="label-mono mt-2 mb-1.5 px-1 text-muted-foreground">Hide</p>
-        <DisplayToggle
-          label="Done work"
-          on={hideCompleted}
-          onClick={() => onHideCompleted(!hideCompleted)}
         />
       </PopoverContent>
     </Popover>

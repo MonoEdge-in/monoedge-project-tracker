@@ -319,8 +319,9 @@ export async function getTab(
 
   if (!tabs.length) throw new SheetError("The spreadsheet has no tabs.", 500);
 
+  const tabTitle = (name: string) => name.trim().toLowerCase();
   const match = config.tabName
-    ? tabs.find((s) => s.properties.title === config.tabName)
+    ? tabs.find((s) => tabTitle(s.properties.title) === tabTitle(config.tabName!))
     : tabs[0];
 
   if (!match) {

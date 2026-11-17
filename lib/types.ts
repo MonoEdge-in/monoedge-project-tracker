@@ -22,7 +22,13 @@ export const STATUSES = [
 export const PRIORITIES = ["Critical", "High", "Medium", "Low"] as const;
 
 /** Matches the Product dropdown in column L of the tracking sheet. */
-export const PRODUCTS = ["Kaagaz", "Soch", "Business Brain"] as const;
+export const PRODUCTS = [
+  "Kaagaz",
+  "Soch",
+  "Business Brain",
+  "Internal",
+  "Computer Vision",
+] as const;
 
 export type Status = (typeof STATUSES)[number];
 export type Priority = (typeof PRIORITIES)[number];
@@ -120,11 +126,14 @@ export type NewWorkItem = Omit<
 
 export interface Filters {
   query: string;
+  /** Primary person or Assigned by. A task matches if either role is one of these. */
   assigneeIds: string[];
   priorities: Priority[];
   types: Product[];
-  /** Hide anything already shipped. */
+  /** Hide anything already shipped. Kept in step with a hidden Completed column. */
   hideCompleted: boolean;
+  /** Board columns to leave off the board. Empty shows Yet to start, In progress, and Completed. */
+  hiddenColumns: string[];
   /** Include Completed work aged off the board (see COMPLETED_ARCHIVE_AFTER_DAYS). */
   showArchived: boolean;
 }

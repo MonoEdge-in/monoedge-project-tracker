@@ -143,7 +143,9 @@ export function TypeSelect({
 }) {
   return (
     <Select
-      value={value ?? (allowEmpty ? NO_TYPE : undefined)}
+      // Always a string. `undefined` makes the select uncontrolled, so a
+      // choice the save then rejects stays painted in the trigger.
+      value={value ?? NO_TYPE}
       onValueChange={(v) => onChange(v === NO_TYPE ? null : (v as Product))}
     >
       <SelectTrigger className={triggerClass} aria-label="Product">
@@ -153,6 +155,14 @@ export function TypeSelect({
         {allowEmpty ? (
           <SelectItem value={NO_TYPE} className="text-[13px] text-muted-foreground">
             No product
+          </SelectItem>
+        ) : !value ? (
+          <SelectItem
+            value={NO_TYPE}
+            disabled
+            className="text-[13px] text-muted-foreground"
+          >
+            Choose a product
           </SelectItem>
         ) : null}
         {PRODUCTS.map((t) => (
@@ -186,7 +196,10 @@ export function AssigneeSelect({
 
   return (
     <Select
-      value={value ?? (allowEmpty ? UNASSIGNED : undefined)}
+      // Always a string. `undefined` makes the select uncontrolled, so a
+      // person the save then rejects stays painted in the trigger — the
+      // menu says Krishna while the card still has nobody assigned.
+      value={value ?? UNASSIGNED}
       onValueChange={(v) => onChange(v === UNASSIGNED ? null : v)}
     >
       <SelectTrigger className={triggerClass} aria-label={label}>
@@ -202,6 +215,14 @@ export function AssigneeSelect({
               <PersonAvatar memberId={null} size="sm" />
               {placeholder}
             </span>
+          </SelectItem>
+        ) : !value ? (
+          <SelectItem
+            value={UNASSIGNED}
+            disabled
+            className="text-[13px] text-muted-foreground"
+          >
+            Choose someone
           </SelectItem>
         ) : null}
         {members.map((m) => (

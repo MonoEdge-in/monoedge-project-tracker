@@ -99,6 +99,7 @@ export function KanbanBoard({
   items,
   groupBy,
   showParked,
+  hiddenColumns,
   onOpen,
   onAdd,
   onStatus,
@@ -109,6 +110,8 @@ export function KanbanBoard({
   items: WorkItem[];
   groupBy: GroupBy;
   showParked: boolean;
+  /** Column ids to leave off the board. Cards in those columns are already filtered out. */
+  hiddenColumns: string[];
   onOpen: (id: string) => void;
   onAdd: (column: BoardColumnDef, assigneeId?: string | null) => void;
   onStatus: (id: string, status: Status) => void;
@@ -144,7 +147,9 @@ export function KanbanBoard({
   const [overKey, setOverKey] = useState<string | null>(null);
 
   const cols = preview ?? base;
-  const columns = showParked ? [...COLUMNS, PARKED_COLUMN] : COLUMNS;
+  const columns = (showParked ? [...COLUMNS, PARKED_COLUMN] : COLUMNS).filter(
+    (column) => !hiddenColumns.includes(column.id),
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),

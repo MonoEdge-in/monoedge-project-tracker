@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { dueLabel, isOverdue, relativeTime } from "@/lib/dates";
 import type { WorkItem } from "@/lib/types";
 import { StatusChip, WorkItemRef } from "@/components/shared/badges";
+import { useTracker } from "@/lib/store";
 import { workItemFieldProblem } from "@/lib/validation";
 import {
   AssigneeSelect,
@@ -74,45 +75,103 @@ function PanelBody({
   onPatch: (id: string, patch: Partial<WorkItem>) => void;
   onDelete: (id: string) => void;
 }) {
-  // Title and description are held locally and committed on blur so every
-  // keystroke does not become a write to the sheet.
+  // Title, description, notes, and story points are held locally so every
+  // keystroke does not become a write to the sheet. Menus and dates write
+  // as soon as they change. Save, and leaving a text field, send whatever
+  // of that text is ready — an empty description does not throw away a
+  // note you already typed.
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description);
   const [notes, setNotes] = useState(item.notes);
-
-  // Checked live against what is typed. A field with the problem is simply
-  // not saved on blur: the text stays put, with the reason under it, so the
-  // fix is one keystroke rather than retyping.
-  const fieldProblem = workItemFieldProblem(
-    {
-      title,
-      description,
-      notes,
-      plannedDate: item.plannedDate,
-      assigneeId: item.assigneeId,
-      secondaryAssigneeId: item.secondaryAssigneeId,
-      type: item.type,
-    },
-    "update",
-  );
-  const blocked = (
-    field:
-      | "title"
-      | "description"
-      | "notes"
-      | "plannedDate"
-      | "assigneeId"
-      | "secondaryAssigneeId"
-      | "type",
-  ) => fieldProblem?.field === field;
   const [storyPoints, setStoryPoints] = useState(
     item.storyPoints !== null && item.storyPoints !== undefined
       ? String(item.storyPoints)
       : "",
   );
+  const sync = useTracker((s) => s.sync);
+  const saveError = useTracker((s) => (s.sync === "error" ? s.error : null));
+
+  const titleProblem = workItemFieldProblem({ title }, "update");
+  const descriptionProblem = workItemFieldProblem({ description }, "update");
+  const notesProblem = workItemFieldProblem({ notes }, "update");
+  const endDateProblem = workItemFieldProblem(
+    { plannedDate: item.plannedDate },
+    "update",
+  );
+  const assigneeProblem = workItemFieldProblem(
+    { assigneeId: item.assigneeId },
+    "update",
+  );
+  const assignedByProblem = workItemFieldProblem(
+    { secondaryAssigneeId: item.secondaryAssigneeId },
+    "update",
+  );
+  const productProblem = workItemFieldProblem({ type: item.type }, "update");
 
   const patch = (p: Partial<WorkItem>) => onPatch(item.id, p);
   const overdue = isOverdue(item);
+
+  const textPatch = (): Partial<WorkItem> => {
+    const next: Partial<WorkItem> = {};
+    const nextTitle = title.trim();
+    if (
+      nextTitle &&
+      nextTitle !== item.title &&
+      !workItemFieldProblem({ title: nextTitle }, "update")
+    ) {
+      next.title = nextTitle;
+    }
+    const nextDescription = description.trim();
+    if (
+      nextDescription &&
+      nextDescription !== item.description &&
+      !workItemFieldProblem({ description: nextDescription }, "update")
+    ) {
+      next.description = nextDescription;
+    }
+    if (notes !== item.notes && !workItemFieldProblem({ notes }, "update")) {
+      next.notes = notes;
+    }
+    const trimmedPoints = storyPoints.trim();
+    if (!trimmedPoints) {
+      if (item.storyPoints !== null && item.storyPoints !== undefined) {
+        next.storyPoints = null;
+      }
+    } else {
+      const parsed = parseInt(trimmedPoints, 10);
+      if (
+        Number.isFinite(parsed) &&
+        parsed >= 0 &&
+        parsed !== item.storyPoints
+      ) {
+        next.storyPoints = parsed;
+      }
+    }
+    return next;
+  };
+
+  const pending = textPatch();
+  const dirty = Object.keys(pending).length > 0;
+
+  const commit = () => {
+    const nextTitle = title.trim();
+    const nextDescription = description.trim();
+    if (!nextTitle) setTitle(item.title);
+    if (!nextDescription) setDescription(item.description);
+    const trimmedPoints = storyPoints.trim();
+    if (trimmedPoints) {
+      const parsed = parseInt(trimmedPoints, 10);
+      if (Number.isFinite(parsed) && parsed >= 0) setStoryPoints(String(parsed));
+      else {
+        setStoryPoints(
+          item.storyPoints !== null && item.storyPoints !== undefined
+            ? String(item.storyPoints)
+            : "",
+        );
+      }
+    }
+    if (dirty) patch(pending);
+  };
 
   return (
     <>
@@ -129,18 +188,13 @@ function PanelBody({
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => {
-            if (blocked("title")) return;
-            const next = title.trim();
-            if (next && next !== item.title) patch({ title: next });
-            else if (!next) setTitle(item.title);
-          }}
+          onBlur={commit}
           aria-label="Task name"
-          aria-invalid={blocked("title")}
+          aria-invalid={!!titleProblem}
           placeholder="Name this task"
           className="-mx-1 rounded px-1 text-[17px] leading-snug font-semibold tracking-[-0.01em] hover:bg-muted/60 focus:bg-muted/60 focus-visible:outline-none"
         />
-        <FormulaError problem={fieldProblem} field="title" />
+        <FormulaError problem={titleProblem} field="title" />
       </SheetHeader>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
@@ -148,20 +202,12 @@ function PanelBody({
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            onBlur={() => {
-              if (blocked("description")) return;
-              const next = description.trim();
-              if (!next) {
-                setDescription(item.description);
-                return;
-              }
-              if (next !== item.description) patch({ description: next });
-            }}
-            aria-invalid={blocked("description")}
+            onBlur={commit}
+            aria-invalid={!!descriptionProblem}
             placeholder="What needs doing, and anything the next person should know."
             className="min-h-24 resize-y bg-card text-[13px] leading-relaxed"
           />
-          <FormulaError problem={fieldProblem} field="description" />
+          <FormulaError problem={descriptionProblem} field="description" />
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
@@ -180,7 +226,7 @@ function PanelBody({
               }}
               allowEmpty={false}
             />
-            <FormulaError problem={fieldProblem} field="assigneeId" />
+            <FormulaError problem={assigneeProblem} field="assigneeId" />
           </Field>
           <Field label="Priority">
             <PrioritySelect
@@ -198,7 +244,7 @@ function PanelBody({
               }}
               allowEmpty={false}
             />
-            <FormulaError problem={fieldProblem} field="secondaryAssigneeId" />
+            <FormulaError problem={assignedByProblem} field="secondaryAssigneeId" />
           </Field>
           <Field label="Product">
             <TypeSelect
@@ -209,7 +255,7 @@ function PanelBody({
               }}
               allowEmpty={false}
             />
-            <FormulaError problem={fieldProblem} field="type" />
+            <FormulaError problem={productProblem} field="type" />
           </Field>
           <Field label="Story points">
             <Input
@@ -219,24 +265,7 @@ function PanelBody({
               placeholder="e.g. 1, 2, 3, 5"
               value={storyPoints}
               onChange={(e) => setStoryPoints(e.target.value)}
-              onBlur={() => {
-                const trimmed = storyPoints.trim();
-                if (!trimmed) {
-                  if (item.storyPoints !== null) patch({ storyPoints: null });
-                } else {
-                  const parsed = parseInt(trimmed, 10);
-                  if (Number.isFinite(parsed) && parsed >= 0) {
-                    setStoryPoints(String(parsed));
-                    if (parsed !== item.storyPoints) patch({ storyPoints: parsed });
-                  } else {
-                    setStoryPoints(
-                      item.storyPoints !== null && item.storyPoints !== undefined
-                        ? String(item.storyPoints)
-                        : "",
-                    );
-                  }
-                }
-              }}
+              onBlur={commit}
               className="h-9 bg-card font-mono text-[13px]"
             />
           </Field>
@@ -246,15 +275,12 @@ function PanelBody({
           <Textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            onBlur={() => {
-              if (blocked("notes")) return;
-              if (notes !== item.notes) patch({ notes });
-            }}
-            aria-invalid={blocked("notes")}
+            onBlur={commit}
+            aria-invalid={!!notesProblem}
             placeholder="Where this has got to, blockers, anything said in passing."
             className="min-h-20 resize-y bg-card text-[13px] leading-relaxed"
           />
-          <FormulaError problem={fieldProblem} field="notes" />
+          <FormulaError problem={notesProblem} field="notes" />
         </Field>
 
         <Separator />
@@ -294,9 +320,9 @@ function PanelBody({
                   if (!plannedDate) return;
                   patch({ plannedDate });
                 }}
-                ariaInvalid={blocked("plannedDate")}
+                ariaInvalid={!!endDateProblem}
               />
-              <FormulaError problem={fieldProblem} field="plannedDate" />
+              <FormulaError problem={endDateProblem} field="plannedDate" />
             </div>
             <DateField
               label="Actual"
@@ -316,26 +342,45 @@ function PanelBody({
         <ItemHistory itemId={item.id} updatedAt={item.updatedAt} />
       </div>
 
-      <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-rule bg-muted/40 px-5 py-3">
-        <span className="font-mono text-[10.5px] text-muted-foreground">
-          {item.sheetRow ? `Sheet row ${item.sheetRow}` : "Not yet in sheet"}
-          {" · "}
-          saved {relativeTime(item.updatedAt)}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1.5 px-2 text-[12px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => {
-            onDelete(item.id);
-            toast(`MON-${item.ref} deleted`, {
-              description: item.title,
-            });
-          }}
-        >
-          <Trash2 className="size-3.5" />
-          Delete
-        </Button>
+      <footer className="flex shrink-0 flex-col gap-2 border-t border-rule bg-muted/40 px-5 py-3">
+        {saveError && (
+          <p role="alert" className="text-[11.5px] text-destructive">
+            {saveError}
+          </p>
+        )}
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-mono text-[10.5px] text-muted-foreground">
+            {item.sheetRow ? `Sheet row ${item.sheetRow}` : "Not yet in sheet"}
+            {" · "}
+            saved {relativeTime(item.updatedAt)}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 px-3 text-[12px]"
+              disabled={!dirty || sync === "syncing"}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={commit}
+            >
+              {sync === "syncing" ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-[12px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => {
+                onDelete(item.id);
+                toast(`MON-${item.ref} deleted`, {
+                  description: item.title,
+                });
+              }}
+            >
+              <Trash2 className="size-3.5" />
+              Delete
+            </Button>
+          </div>
+        </div>
       </footer>
     </>
   );
