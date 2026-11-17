@@ -5,7 +5,13 @@ import { create } from "zustand";
 import { repository } from "./repositories";
 import { RepositoryError } from "./repository";
 import { boardSortDay, isArchivedCompleted, todayIso } from "./dates";
-import { STARTED_STAGES, TEAM, TERMINAL_STAGES, columnById } from "./constants";
+import {
+  STARTED_STAGES,
+  TEAM,
+  TERMINAL_STAGES,
+  columnById,
+  columnForStatus,
+} from "./constants";
 import type {
   Filters,
   GroupBy,
@@ -16,7 +22,7 @@ import type {
   SyncState,
   WorkItem,
 } from "./types";
-import { workItemFieldProblem } from "./validation";
+import { problemForPatch, workItemFieldProblem } from "./validation";
 
 export const EMPTY_FILTERS: Filters = {
   query: "",
@@ -24,6 +30,7 @@ export const EMPTY_FILTERS: Filters = {
   priorities: [],
   types: [],
   hideCompleted: false,
+  hiddenColumns: [],
   showArchived: false,
 };
 
@@ -235,19 +242,7 @@ export const useTracker = create<TrackerState>((set, get) => ({
       ...patch,
     };
 
-    const merged = { ...current, ...full };
-    const problem = workItemFieldProblem(
-      {
-        title: merged.title,
-        description: merged.description,
-        notes: merged.notes,
-        plannedDate: merged.plannedDate,
-        assigneeId: merged.assigneeId,
-        secondaryAssigneeId: merged.secondaryAssigneeId,
-        type: merged.type,
-      },
-      "update",
-    );
+    const problem = problemForPatch(full);
     if (problem) {
       set({ sync: "error", error: problem.message });
       return;
@@ -398,9 +393,14 @@ export function applyFilters(items: WorkItem[], f: Filters): WorkItem[] {
     if (!f.showArchived && !q && isArchivedCompleted(i)) return false;
     // "Hide done" covers both finished columns, not just Completed.
     if (f.hideCompleted && TERMINAL_STAGES.includes(i.status)) return false;
+    if ((f.hiddenColumns ?? []).includes(columnForStatus(i.status).id)) return false;
     if (f.assigneeIds.length) {
-      const key = i.assigneeId ?? "unassigned";
-      if (!f.assigneeIds.includes(key)) return false;
+      const primary = i.assigneeId ?? "unassigned";
+      const assignedBy = i.secondaryAssigneeId;
+      const matches =
+        f.assigneeIds.includes(primary) ||
+        (assignedBy !== null && f.assigneeIds.includes(assignedBy));
+      if (!matches) return false;
     }
     if (f.priorities.length && !f.priorities.includes(i.priority)) return false;
     if (f.types.length) {
@@ -420,6 +420,7 @@ export const isFiltered = (f: Filters): boolean =>
   f.priorities.length > 0 ||
   f.types.length > 0 ||
   f.hideCompleted ||
+  (f.hiddenColumns?.length ?? 0) > 0 ||
   f.showArchived;
 
 export const byOrder = (a: WorkItem, b: WorkItem): number =>

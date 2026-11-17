@@ -163,17 +163,15 @@ export default function TrackerPage() {
           <BoardSkeleton />
         ) : view === "sheet" && items.length === 0 ? (
           <EmptyBoard onAdd={() => openComposer()} />
-        ) : items.length > 0 && visible.length === 0 ? (
-          <NoMatches onClear={clearFilters} />
         ) : view === "board" ? (
-          // The board is a flex child now that the first-run hint can sit
-          // above it, so it takes the remaining height rather than 100% of a
-          // container the hint has already eaten into.
+          // The board stays up when a column is empty or switched off, so the
+          // columns you left ticked are still there to look at.
           <div className="min-h-0 flex-1">
             <KanbanBoard
               items={visible}
               groupBy={groupBy}
               showParked={showParked}
+              hiddenColumns={filters.hiddenColumns}
               onOpen={select}
               onAdd={openComposer}
               onStatus={(id, status) => void patchItem(id, { status })}
@@ -198,6 +196,8 @@ export default function TrackerPage() {
               onToggleColumnDateSort={toggleColumnDateSort}
             />
           </div>
+        ) : items.length > 0 && visible.length === 0 ? (
+          <NoMatches onClear={clearFilters} />
         ) : (
           <SheetTable items={visible} onOpen={select} />
         )}

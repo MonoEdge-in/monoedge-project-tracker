@@ -13,7 +13,7 @@ import {
   str,
 } from "@/lib/sheet-mapping";
 import type { Member, WorkItem } from "@/lib/types";
-import { workItemFieldProblem } from "@/lib/validation";
+import { problemForPatch, workItemFieldProblem } from "@/lib/validation";
 import { loadTeam } from "./team-store";
 import {
   deleteRow,
@@ -270,19 +270,8 @@ export async function updateItem(
 
   guard?.(current);
 
-  const merged = { ...current, ...patch };
-  assertValidWorkItem(
-    {
-      title: merged.title,
-      description: merged.description,
-      notes: merged.notes,
-      plannedDate: merged.plannedDate,
-      assigneeId: merged.assigneeId,
-      secondaryAssigneeId: merged.secondaryAssigneeId,
-      type: merged.type,
-    },
-    "update",
-  );
+  const problem = problemForPatch(patch);
+  if (problem) throw new SheetError(problem.message, 400);
 
   const epoch = new Date(0).toISOString();
   if (

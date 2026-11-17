@@ -182,6 +182,8 @@ export const PRODUCT_TOKENS: Record<Product, Token & { short: string }> = {
   Kaagaz: { color: "#1E4E8C", short: "Kaagaz" },
   Soch: { color: "#8A5A20", short: "Soch" },
   "Business Brain": { color: "#9E2F4E", short: "B. Brain" },
+  Internal: { color: "#1F6F4A", short: "Internal" },
+  "Computer Vision": { color: "#5B45A8", short: "C. Vision" },
 };
 
 /** @deprecated Use PRODUCT_TOKENS */

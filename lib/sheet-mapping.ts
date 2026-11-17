@@ -269,6 +269,9 @@ export const PRODUCT_ALIASES: Record<string, Product> = {
   soch: "Soch",
   "business brain": "Business Brain",
   "business-brain": "Business Brain",
+  internal: "Internal",
+  "computer vision": "Computer Vision",
+  "computer-vision": "Computer Vision",
 };
 
 export function parseProduct(raw: string): Product | null {

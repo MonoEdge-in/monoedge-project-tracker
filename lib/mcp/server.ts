@@ -126,7 +126,10 @@ export function createTrackerMcp() {
         query: z.string().optional().describe("Search title, description, and id"),
         status: z.enum(STATUSES).optional(),
         product: z.enum(PRODUCTS).optional(),
-        person: z.string().optional().describe("Primary person name or member id"),
+        person: z
+          .string()
+          .optional()
+          .describe("Name or member id of the primary person or the person who assigned it"),
         includeArchived: z
           .boolean()
           .optional()
@@ -145,6 +148,7 @@ export function createTrackerMcp() {
           priorities: [],
           types: product ? [product] : [],
           hideCompleted: false,
+          hiddenColumns: [],
           showArchived: includeArchived ?? Boolean(query?.trim()),
         }).filter((item) => (status ? item.status === status : true));
         return ok({

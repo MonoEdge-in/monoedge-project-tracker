@@ -60,8 +60,12 @@ export function formulaProblem(
 
 /**
  * Validation for the fields people edit when adding or updating work. Formula
- * text is checked first; on create, title, description, and the end date must
- * all be present before save.
+ * text is checked first. On create, every required field must be present.
+ * On update, only the fields actually passed in are judged — a blank one
+ * among them is refused, and a field left out of the patch is left alone.
+ * Callers must pass the patch, not the merged row: old sheet rows are missing
+ * description, end date, people, or product, and folding those blanks into
+ * every write blocks a date change on a card that otherwise looks filled in.
  */
 export function workItemFieldProblem(
   fields: Partial<
@@ -149,4 +153,29 @@ export function workItemFieldProblem(
   }
 
   return null;
+}
+
+/**
+ * The update check. Only keys this write is setting are examined, so moving
+ * a card or changing its end date is not refused because some other required
+ * field was never filled in on an older row. Clearing one of those fields
+ * is still refused, because the key is present and the value is empty.
+ */
+export function problemForPatch(
+  patch: Partial<WorkItem>,
+): WorkItemFieldProblem | null {
+  return workItemFieldProblem(
+    {
+      ...("title" in patch ? { title: patch.title } : {}),
+      ...("description" in patch ? { description: patch.description } : {}),
+      ...("notes" in patch ? { notes: patch.notes } : {}),
+      ...("plannedDate" in patch ? { plannedDate: patch.plannedDate } : {}),
+      ...("assigneeId" in patch ? { assigneeId: patch.assigneeId } : {}),
+      ...("secondaryAssigneeId" in patch
+        ? { secondaryAssigneeId: patch.secondaryAssigneeId }
+        : {}),
+      ...("type" in patch ? { type: patch.type } : {}),
+    },
+    "update",
+  );
 }
